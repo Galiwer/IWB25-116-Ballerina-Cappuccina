@@ -259,7 +259,7 @@ function setUserVaccines(string userId, json vaccinesJson) returns error? {
 // Health service definition
 @http:ServiceConfig {
     cors: {
-        allowOrigins: ["http://localhost:5173", "http://127.0.0.1:5173", "https://babaf.vercel.app"],
+        allowOrigins: ["http://localhost:5173", "http://127.0.0.1:5173", "https://babapotha.vercel.app"],
         allowCredentials: false,
         allowHeaders: ["content-type", "accept", "authorization"],
         allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
