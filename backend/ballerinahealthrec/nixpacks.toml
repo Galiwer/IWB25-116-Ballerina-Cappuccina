@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["ballerina"]
+nixPkgs = ["ballerina", "openjdk"]
 
 [phases.install]
 cmds = ["bal build"]

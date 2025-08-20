@@ -3,7 +3,7 @@ import ballerina/io;
 import ballerina/time;
 import ballerina/uuid;
 import ballerina/crypto;
-import ballerina/env;
+import ballerina/os;
 import ballerinax/mongodb;
 import ballerina/lang.'string as strings;
 // ints langlib not needed
@@ -12,9 +12,18 @@ import ballerina/lang.'string as strings;
 final string DATABASE_NAME = "babadb";
 final string[] COLLECTIONS = ["users", "diseases", "appointments", "bmi_records", "vaccine_records", "doc_appointments"];
 
+// Function to get MongoDB connection string
+function getMongoConnectionString() returns string {
+    string? envUri = os:getEnv("MONGODB_URI");
+    if envUri is string {
+        return envUri;
+    }
+    return "mongodb+srv://himashavalantina55:Hima%401234@cluster0.ktheqad.mongodb.net/healthDB?retryWrites=true&w=majority";
+}
+
 // Initialize MongoDB client
 final mongodb:Client mongoClient = check new ({
-    connection: check env:get("MONGODB_URI") ?: "mongodb://localhost:27017/babadb"
+    connection: getMongoConnectionString()
 });
 
 // Function to hash password - simplified version
@@ -250,7 +259,7 @@ function setUserVaccines(string userId, json vaccinesJson) returns error? {
 // Health service definition
 @http:ServiceConfig {
     cors: {
-        allowOrigins: ["http://localhost:5173", "http://127.0.0.1:5173", "https://your-frontend-name.vercel.app"],
+        allowOrigins: ["http://localhost:5173", "http://127.0.0.1:5173", "https://babaf.vercel.app"],
         allowCredentials: false,
         allowHeaders: ["content-type", "accept", "authorization"],
         allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]

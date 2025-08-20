@@ -9,3 +9,4 @@ restartPolicyType = "on_failure"
 
 [env]
 BALLERINA_DISTRIBUTION = "2201.12.7"
+PORT = "9090"
