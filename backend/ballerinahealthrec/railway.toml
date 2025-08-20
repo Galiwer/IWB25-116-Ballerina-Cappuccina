@@ -8,6 +8,6 @@ healthcheckTimeout = 300
 restartPolicyType = "on_failure"
 
 [env]
-BALLERINA_DISTRIBUTION = "2201.12.7"
+BALLERINA_DISTRIBUTION = "2201.12.8"
 PORT = "9090"
 MONGODB_URI = "mongodb+srv://himashavalantina55:Hima%401234@cluster0.ktheqad.mongodb.net/healthDB?retryWrites=true&w=majority"
