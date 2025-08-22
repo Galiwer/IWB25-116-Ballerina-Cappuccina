@@ -18,7 +18,7 @@ function getMongoConnectionString() returns string {
     if envUri is string {
         return envUri;
     }
-    return "mongodb+srv://himashavalantina55:Hima%401234@cluster0.ktheqad.mongodb.net/healthDB?retryWrites=true&w=majority";
+    return "mongodb+srv://msaokumara:qZIR7PRZ3AJwyWal@cluster0.wnkqicv.mongodb.net/babadb?retryWrites=true&w=majority";
 }
 
 // Initialize MongoDB client

@@ -37,7 +37,7 @@ restartPolicyType = "on_failure"
 
 [env]
 PORT = "9090"
-MONGODB_URI = "mongodb+srv://himashavalantina55:Hima%401234@cluster0.ktheqad.mongodb.net/healthDB?retryWrites=true&w=majority"
+MONGODB_URI = "mongodb+srv://msaokumara:qZIR7PRZ3AJwyWal@cluster0.wnkqicv.mongodb.net/babadb?retryWrites=true&w=majority"
 ```
 
 ### 2. Deploy to Railway
