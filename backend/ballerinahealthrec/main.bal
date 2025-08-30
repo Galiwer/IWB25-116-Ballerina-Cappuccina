@@ -24,7 +24,7 @@ type UserGD record {|
 |};
 
 // Database configuration
-final string DATABASE_NAME = "babadb";
+final string DATABASE_NAME = "railway";
 
 // Function to get MySQL connection string
 function getMySQLConnectionString() returns string {
@@ -50,7 +50,7 @@ function getMySQLConnectionString() returns string {
     if dbHost is string && dbUser is string {
         string host = dbHost;
         string port = dbPort is string ? dbPort : "3306";
-        string database = dbName is string ? dbName : "babadb";
+        string database = dbName is string ? dbName : "railway";
         string user = dbUser;
         string password = dbPassword is string ? dbPassword : "";
         
@@ -58,7 +58,7 @@ function getMySQLConnectionString() returns string {
     }
     
     // Default to XAMPP MySQL with connection pooling and performance optimizations
-    return "jdbc:mysql://localhost:3306/babadb?user=root&password=&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true&autoReconnect=true&useUnicode=true&characterEncoding=utf8&cachePrepStmts=true&useServerPrepStmts=true&rewriteBatchedStatements=true&maintainTimeStats=false&elideSetAutoCommits=true&useLocalSessionState=true";
+    return "jdbc:mysql://localhost:3306/railway?user=root&password=&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true&autoReconnect=true&useUnicode=true&characterEncoding=utf8&cachePrepStmts=true&useServerPrepStmts=true&rewriteBatchedStatements=true&maintainTimeStats=false&elideSetAutoCommits=true&useLocalSessionState=true";
 }
 
 // Function to get MySQL connection string without database
@@ -79,14 +79,14 @@ function bootstrapDatabase() returns error? {
     mysql:Client bootstrapClient = check new (getMySQLConnectionStringNoDB());
     
     // Create database if it doesn't exist
-    sql:ParameterizedQuery createDB = `CREATE DATABASE IF NOT EXISTS babadb`;
+    sql:ParameterizedQuery createDB = `CREATE DATABASE IF NOT EXISTS railway`;
     sql:ExecutionResult|sql:Error result = bootstrapClient->execute(createDB);
     if result is sql:Error {
         return result;
     }
     
     // Use the database
-    sql:ParameterizedQuery useDB = `USE babadb`;
+    sql:ParameterizedQuery useDB = `USE railway`;
     sql:ExecutionResult|sql:Error useResult = bootstrapClient->execute(useDB);
     if useResult is sql:Error {
         return useResult;
@@ -702,12 +702,12 @@ service /health on new http:Listener(9090) {
         mysql:Client dbClient = <mysql:Client>globalClient;
         
         // First ensure we're using the correct database
-        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE babadb`);
+        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE railway`);
         if useDbResult is sql:Error {
             return <http:InternalServerError>{ body: { message: "Database connection error" } };
         }
         
-        sql:ParameterizedQuery vq = `SELECT id, user_id, name, dose, due_date, is_custom, created_at, completed_date, offset_months FROM babadb.vaccine_records WHERE user_id = ${userId}`;
+        sql:ParameterizedQuery vq = `SELECT id, user_id, name, dose, due_date, is_custom, created_at, completed_date, offset_months FROM railway.vaccine_records WHERE user_id = ${userId}`;
         
         stream<record {}, sql:Error?> s = dbClient->query(vq);
         record {}[] vaccines = [];
@@ -857,31 +857,31 @@ service /health on new http:Listener(9090) {
         
         if vaccineData.newName != vaccineData.name && vaccineData.newDose != vaccineData.dose && (vaccineData.newOffsetMonths is int) {
             // Update name, dose, and offsetMonths
-            sql:ParameterizedQuery updateQuery = `UPDATE babadb.vaccine_records SET name = ${vaccineData.newName}, dose = ${vaccineData.newDose}, offset_months = ${vaccineData.newOffsetMonths} WHERE name = ${vaccineData.name} AND dose = ${vaccineData.dose} AND user_id = ${vaccineData.userId}`;
+            sql:ParameterizedQuery updateQuery = `UPDATE railway.vaccine_records SET name = ${vaccineData.newName}, dose = ${vaccineData.newDose}, offset_months = ${vaccineData.newOffsetMonths} WHERE name = ${vaccineData.name} AND dose = ${vaccineData.dose} AND user_id = ${vaccineData.userId}`;
             result = dbClient->execute(updateQuery);
         } else if vaccineData.newName != vaccineData.name && vaccineData.newDose != vaccineData.dose {
             // Update both name and dose
-            sql:ParameterizedQuery updateQuery = `UPDATE babadb.vaccine_records SET name = ${vaccineData.newName}, dose = ${vaccineData.newDose} WHERE name = ${vaccineData.name} AND dose = ${vaccineData.dose} AND user_id = ${vaccineData.userId}`;
+            sql:ParameterizedQuery updateQuery = `UPDATE railway.vaccine_records SET name = ${vaccineData.newName}, dose = ${vaccineData.newDose} WHERE name = ${vaccineData.name} AND dose = ${vaccineData.dose} AND user_id = ${vaccineData.userId}`;
             result = dbClient->execute(updateQuery);
         } else if vaccineData.newName != vaccineData.name && (vaccineData.newOffsetMonths is int) {
             // Update name and offsetMonths
-            sql:ParameterizedQuery updateQuery = `UPDATE babadb.vaccine_records SET name = ${vaccineData.newName}, offset_months = ${vaccineData.newOffsetMonths} WHERE name = ${vaccineData.name} AND dose = ${vaccineData.dose} AND user_id = ${vaccineData.userId}`;
+            sql:ParameterizedQuery updateQuery = `UPDATE railway.vaccine_records SET name = ${vaccineData.newName}, offset_months = ${vaccineData.newOffsetMonths} WHERE name = ${vaccineData.name} AND dose = ${vaccineData.dose} AND user_id = ${vaccineData.userId}`;
             result = dbClient->execute(updateQuery);
         } else if vaccineData.newDose != vaccineData.dose && (vaccineData.newOffsetMonths is int) {
             // Update dose and offsetMonths
-            sql:ParameterizedQuery updateQuery = `UPDATE babadb.vaccine_records SET dose = ${vaccineData.newDose}, offset_months = ${vaccineData.newOffsetMonths} WHERE name = ${vaccineData.name} AND dose = ${vaccineData.dose} AND user_id = ${vaccineData.userId}`;
+            sql:ParameterizedQuery updateQuery = `UPDATE railway.vaccine_records SET dose = ${vaccineData.newDose}, offset_months = ${vaccineData.newOffsetMonths} WHERE name = ${vaccineData.name} AND dose = ${vaccineData.dose} AND user_id = ${vaccineData.userId}`;
             result = dbClient->execute(updateQuery);
         } else if vaccineData.newName != vaccineData.name {
             // Update only name
-            sql:ParameterizedQuery updateQuery = `UPDATE babadb.vaccine_records SET name = ${vaccineData.newName} WHERE name = ${vaccineData.name} AND dose = ${vaccineData.dose} AND user_id = ${vaccineData.userId}`;
+            sql:ParameterizedQuery updateQuery = `UPDATE railway.vaccine_records SET name = ${vaccineData.newName} WHERE name = ${vaccineData.name} AND dose = ${vaccineData.dose} AND user_id = ${vaccineData.userId}`;
             result = dbClient->execute(updateQuery);
         } else if vaccineData.newDose != vaccineData.dose {
             // Update only dose
-            sql:ParameterizedQuery updateQuery = `UPDATE babadb.vaccine_records SET dose = ${vaccineData.newDose} WHERE name = ${vaccineData.name} AND dose = ${vaccineData.dose} AND user_id = ${vaccineData.userId}`;
+            sql:ParameterizedQuery updateQuery = `UPDATE railway.vaccine_records SET dose = ${vaccineData.newDose} WHERE name = ${vaccineData.name} AND dose = ${vaccineData.dose} AND user_id = ${vaccineData.userId}`;
             result = dbClient->execute(updateQuery);
         } else if (vaccineData.newOffsetMonths is int) {
             // Update only offsetMonths
-            sql:ParameterizedQuery updateQuery = `UPDATE babadb.vaccine_records SET offset_months = ${vaccineData.newOffsetMonths} WHERE name = ${vaccineData.name} AND dose = ${vaccineData.dose} AND user_id = ${vaccineData.userId}`;
+            sql:ParameterizedQuery updateQuery = `UPDATE railway.vaccine_records SET offset_months = ${vaccineData.newOffsetMonths} WHERE name = ${vaccineData.name} AND dose = ${vaccineData.dose} AND user_id = ${vaccineData.userId}`;
             result = dbClient->execute(updateQuery);
         } else {
             // No changes
@@ -936,7 +936,7 @@ service /health on new http:Listener(9090) {
         mysql:Client dbClient = <mysql:Client>globalClient;
         
         // First ensure we're using the correct database
-        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE babadb`);
+        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE railway`);
         if useDbResult is sql:Error {
             return <http:InternalServerError>{ body: { message: "Database connection error" } };
         }
@@ -954,15 +954,15 @@ service /health on new http:Listener(9090) {
         // Update the vaccine record using parameterized queries
         sql:ExecutionResult|sql:Error result;
         if (vaccineData.received && completedDate is string) {
-            sql:ParameterizedQuery updateQuery = `UPDATE babadb.vaccine_records SET completed_date = ${completedDate} WHERE user_id = ${vaccineData.userId} AND name = ${vaccineData.name} AND dose = ${vaccineData.dose}`;
+            sql:ParameterizedQuery updateQuery = `UPDATE railway.vaccine_records SET completed_date = ${completedDate} WHERE user_id = ${vaccineData.userId} AND name = ${vaccineData.name} AND dose = ${vaccineData.dose}`;
             result = dbClient->execute(updateQuery);
         } else if (vaccineData.received) {
             // If received but no date provided, use current date
-            sql:ParameterizedQuery updateQuery = `UPDATE babadb.vaccine_records SET completed_date = NOW() WHERE user_id = ${vaccineData.userId} AND name = ${vaccineData.name} AND dose = ${vaccineData.dose}`;
+            sql:ParameterizedQuery updateQuery = `UPDATE railway.vaccine_records SET completed_date = NOW() WHERE user_id = ${vaccineData.userId} AND name = ${vaccineData.name} AND dose = ${vaccineData.dose}`;
             result = dbClient->execute(updateQuery);
         } else {
             // If marking as not received, clear the completed_date
-            sql:ParameterizedQuery updateQuery = `UPDATE babadb.vaccine_records SET completed_date = NULL WHERE user_id = ${vaccineData.userId} AND name = ${vaccineData.name} AND dose = ${vaccineData.dose}`;
+            sql:ParameterizedQuery updateQuery = `UPDATE railway.vaccine_records SET completed_date = NULL WHERE user_id = ${vaccineData.userId} AND name = ${vaccineData.name} AND dose = ${vaccineData.dose}`;
             result = dbClient->execute(updateQuery);
         }
         
@@ -980,12 +980,12 @@ service /health on new http:Listener(9090) {
         mysql:Client dbClient = <mysql:Client>globalClient;
         
         // First ensure we're using the correct database
-        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE babadb`);
+        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE railway`);
         if useDbResult is sql:Error {
             return <http:InternalServerError>{ body: { message: "Database connection error" } };
         }
         
-        sql:ParameterizedQuery aq = `SELECT id, user_id, date, time, place, disease, completed FROM babadb.doc_appointments WHERE user_id = ${userId}`;
+        sql:ParameterizedQuery aq = `SELECT id, user_id, date, time, place, disease, completed FROM railway.doc_appointments WHERE user_id = ${userId}`;
         
         stream<record {}, sql:Error?> s = dbClient->query(aq);
         record {}[] appointments = [];
@@ -1070,7 +1070,7 @@ service /health on new http:Listener(9090) {
         mysql:Client dbClient = <mysql:Client>globalClient;
         
         // First, check if the appointment exists
-        sql:ParameterizedQuery checkQuery = `SELECT COUNT(*) as count FROM babadb.doc_appointments WHERE id = ${appointmentUpdate.appointmentId} AND user_id = ${appointmentUpdate.userId}`;
+        sql:ParameterizedQuery checkQuery = `SELECT COUNT(*) as count FROM railway.doc_appointments WHERE id = ${appointmentUpdate.appointmentId} AND user_id = ${appointmentUpdate.userId}`;
         
         stream<record {}, sql:Error?> checkResult = dbClient->query(checkQuery);
         record {}|sql:Error? checkRow = checkResult.next();
@@ -1090,7 +1090,7 @@ service /health on new http:Listener(9090) {
         
         // Use a simple approach - always update all fields
         string doctorNameValue = appointmentUpdate.doctorName;
-        sql:ParameterizedQuery updateQuery = `UPDATE babadb.doc_appointments SET date = ${appointmentUpdate.date}, time = ${appointmentUpdate.time}, place = ${appointmentUpdate.place}, disease = ${appointmentUpdate.disease}, doctor_name = ${doctorNameValue}, completed = ${appointmentUpdate.completed ? "1" : "0"} WHERE id = ${appointmentUpdate.appointmentId} AND user_id = ${appointmentUpdate.userId}`;
+        sql:ParameterizedQuery updateQuery = `UPDATE railway.doc_appointments SET date = ${appointmentUpdate.date}, time = ${appointmentUpdate.time}, place = ${appointmentUpdate.place}, disease = ${appointmentUpdate.disease}, doctor_name = ${doctorNameValue}, completed = ${appointmentUpdate.completed ? "1" : "0"} WHERE id = ${appointmentUpdate.appointmentId} AND user_id = ${appointmentUpdate.userId}`;
         sql:ExecutionResult|sql:Error result = dbClient->execute(updateQuery);
         
         if result is sql:Error {
@@ -1111,13 +1111,13 @@ service /health on new http:Listener(9090) {
         mysql:Client dbClient = <mysql:Client>globalClient;
         
         // First ensure we're using the correct database
-        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE babadb`);
+        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE railway`);
         if useDbResult is sql:Error {
             return <http:InternalServerError>{ body: { message: "Database connection error" } };
         }
         
         // First, check if the appointment exists
-        sql:ParameterizedQuery checkQuery = `SELECT COUNT(*) as count FROM babadb.doc_appointments WHERE id = ${appointmentDelete.appointmentId} AND user_id = ${appointmentDelete.userId}`;
+        sql:ParameterizedQuery checkQuery = `SELECT COUNT(*) as count FROM railway.doc_appointments WHERE id = ${appointmentDelete.appointmentId} AND user_id = ${appointmentDelete.userId}`;
         
         stream<record {}, sql:Error?> checkResult = dbClient->query(checkQuery);
         record {}|sql:Error? checkRow = checkResult.next();
@@ -1136,7 +1136,7 @@ service /health on new http:Listener(9090) {
         }
         
         // Delete the appointment
-        sql:ParameterizedQuery deleteQuery = `DELETE FROM babadb.doc_appointments WHERE id = ${appointmentDelete.appointmentId} AND user_id = ${appointmentDelete.userId}`;
+        sql:ParameterizedQuery deleteQuery = `DELETE FROM railway.doc_appointments WHERE id = ${appointmentDelete.appointmentId} AND user_id = ${appointmentDelete.userId}`;
         sql:ExecutionResult|sql:Error result = dbClient->execute(deleteQuery);
         if result is sql:Error {
             return <http:InternalServerError>{ body: { message: "Error deleting appointment" } };
@@ -1156,13 +1156,13 @@ service /health on new http:Listener(9090) {
         mysql:Client dbClient = <mysql:Client>globalClient;
         
         // First ensure we're using the correct database
-        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE babadb`);
+        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE railway`);
         if useDbResult is sql:Error {
             return <http:InternalServerError>{ body: { message: "Database connection error" } };
         }
         
         // First, check if the appointment exists and get current status
-        sql:ParameterizedQuery checkQuery = `SELECT completed FROM babadb.doc_appointments WHERE id = ${appointmentToggle.appointmentId} AND user_id = ${appointmentToggle.userId}`;
+        sql:ParameterizedQuery checkQuery = `SELECT completed FROM railway.doc_appointments WHERE id = ${appointmentToggle.appointmentId} AND user_id = ${appointmentToggle.userId}`;
         
         stream<record {}, sql:Error?> checkResult = dbClient->query(checkQuery);
         record {}|sql:Error? checkRow = checkResult.next();
@@ -1201,7 +1201,7 @@ service /health on new http:Listener(9090) {
         boolean newStatus = !currentStatus;
         
         // Update the appointment status - include database name in query
-        sql:ParameterizedQuery updateQuery = `UPDATE babadb.doc_appointments SET completed = ${newStatus ? "1" : "0"} WHERE id = ${appointmentToggle.appointmentId} AND user_id = ${appointmentToggle.userId}`;
+        sql:ParameterizedQuery updateQuery = `UPDATE railway.doc_appointments SET completed = ${newStatus ? "1" : "0"} WHERE id = ${appointmentToggle.appointmentId} AND user_id = ${appointmentToggle.userId}`;
         io:println("DEBUG: Updating appointment " + appointmentToggle.appointmentId + " to status: " + newStatus.toString());
         
         sql:ExecutionResult|sql:Error result = dbClient->execute(updateQuery);
@@ -1463,7 +1463,7 @@ service /health on new http:Listener(9090) {
         mysql:Client dbClient = <mysql:Client>globalClient;
         
         // Build the query with individual field updates
-        sql:ParameterizedQuery updateQuery = `UPDATE babadb.users SET first_name = ${profileUpdate.firstName}, last_name = ${profileUpdate.lastName}, email = ${profileUpdate.email}, gender = ${profileUpdate.gender}, date_of_birth = ${profileUpdate.dateOfBirth}, phone_number = ${profileUpdate.phoneNumber}, photo_data_url = ${profileUpdate.photoDataUrl} WHERE id = ${profileUpdate.userId}`;
+        sql:ParameterizedQuery updateQuery = `UPDATE railway.users SET first_name = ${profileUpdate.firstName}, last_name = ${profileUpdate.lastName}, email = ${profileUpdate.email}, gender = ${profileUpdate.gender}, date_of_birth = ${profileUpdate.dateOfBirth}, phone_number = ${profileUpdate.phoneNumber}, photo_data_url = ${profileUpdate.photoDataUrl} WHERE id = ${profileUpdate.userId}`;
         io:println("DEBUG: Profile update query: ", updateQuery);
         sql:ExecutionResult|sql:Error updateResult = dbClient->execute(updateQuery);
         if (updateResult is sql:Error) {
@@ -1510,7 +1510,7 @@ service /health on new http:Listener(9090) {
         mysql:Client dbClient = <mysql:Client>globalClient;
         
         // Ensure we're using the correct database
-        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE babadb`);
+        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE railway`);
         if useDbResult is sql:Error {
             return <http:InternalServerError>{ body: { message: "Database connection error" } };
         }
@@ -1568,7 +1568,7 @@ service /health on new http:Listener(9090) {
         sql:ParameterizedQuery deleteQuery = `DELETE FROM vaccine_records WHERE user_id = ${vaccineData.userId} AND name = ${vaccineData.name} AND dose = ${vaccineData.dose}`;
         
         // First ensure we're using the correct database
-        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE babadb`);
+        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE railway`);
         if useDbResult is sql:Error {
             return <http:InternalServerError>{ body: { message: "Database connection error" } };
         }
@@ -1755,7 +1755,7 @@ service /health on new http:Listener(9090) {
         }
         
         // First ensure we're using the correct database
-        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE babadb`);
+        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE railway`);
         if useDbResult is sql:Error {
             return <http:InternalServerError>{ body: { message: "Database connection error" } };
         }
@@ -1879,7 +1879,7 @@ service /health on new http:Listener(9090) {
         }
         
         // First ensure we're using the correct database
-        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE babadb`);
+        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE railway`);
         if useDbResult is sql:Error {
             return <http:InternalServerError>{ body: { message: "Database connection error" } };
         }
@@ -1935,7 +1935,7 @@ service /health on new http:Listener(9090) {
         }
         
         // First ensure we're using the correct database
-        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE babadb`);
+        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE railway`);
         if useDbResult is sql:Error {
             return <http:InternalServerError>{ body: { message: "Database connection error" } };
         }
@@ -1961,7 +1961,7 @@ service /health on new http:Listener(9090) {
         mysql:Client dbClient = <mysql:Client>globalClient;
         
         // First ensure we're using the correct database
-        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE babadb`);
+        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE railway`);
         if useDbResult is sql:Error {
             return <http:InternalServerError>{ body: { message: "Database connection error" } };
         }
@@ -1997,12 +1997,12 @@ service /health on new http:Listener(9090) {
         }
         
         // First ensure we're using the correct database
-        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE babadb`);
+        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE railway`);
         if useDbResult is sql:Error {
             return <http:InternalServerError>{ body: { message: "Database connection error" } };
         }
         
-        sql:ParameterizedQuery query = `SELECT special_notes FROM babadb.users WHERE id = ${userId}`;
+        sql:ParameterizedQuery query = `SELECT special_notes FROM railway.users WHERE id = ${userId}`;
         stream<record {}, sql:Error?> s = dbClient->query(query);
         record {}[] results = [];
         while true {
@@ -2137,7 +2137,7 @@ service /health on new http:Listener(9090) {
         mysql:Client dbClient = <mysql:Client>globalClient;
         
         // First ensure we're using the correct database
-        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE babadb`);
+        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE railway`);
         if useDbResult is sql:Error {
             return <http:InternalServerError>{ body: { message: "Database connection error" } };
         }
