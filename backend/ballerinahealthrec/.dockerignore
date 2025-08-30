@@ -3,6 +3,9 @@ target/
 *.jar
 *.balx
 
+# Local lib directory (no longer needed with Maven Central)
+lib/
+
 # IDE files
 .vscode/
 .idea/

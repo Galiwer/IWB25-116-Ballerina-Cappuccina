@@ -16,10 +16,10 @@ backend/ballerinahealthrec/
 ├── Ballerina.toml
 ├── Choreo.toml
 ├── main.bal
-├── lib/
-│   └── mysql-connector-j-8.3.0.jar
 └── CHOREO_DEPLOYMENT.md
 ```
+
+**Note**: The MySQL connector is now automatically downloaded from Maven Central during build, so no local `lib/` directory is needed.
 
 ## Step 2: Configure Database
 
@@ -128,7 +128,8 @@ const BASE_URL = 'https://your-choreo-url/health';
 
 1. **Build Failures**
    - Check that all dependencies are properly configured in Ballerina.toml
-   - Ensure the MySQL connector JAR file is present in the lib/ directory
+   - The MySQL connector is automatically downloaded from Maven Central
+   - Ensure your build environment has internet access to download dependencies
 
 2. **Database Connection Issues**
    - Verify database credentials and connection string
