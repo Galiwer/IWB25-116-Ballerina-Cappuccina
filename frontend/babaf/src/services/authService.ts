@@ -12,8 +12,9 @@ export type AuthResponse = {
   redirectTo?: string
 }
 
-const DEFAULT_BASE_URL = 'http://localhost:9090/health'
-const BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || DEFAULT_BASE_URL
+import { getBaseUrl, createFetchOptions, logApiConfig } from './apiConfig'
+
+const BASE_URL = getBaseUrl()
 
 const STORAGE_KEYS = {
   userId: 'auth_user_id',
@@ -57,11 +58,9 @@ export function clearSession() {
 }
 
 export async function login(email: string, password: string): Promise<AuthResponse> {
-  const response = await fetch(`${BASE_URL}/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  })
+  logApiConfig() // Log configuration for debugging
+  
+  const response = await fetch(`${BASE_URL}/login`, createFetchOptions('POST', { email, password }))
   if (!response.ok) {
     const text = await response.text().catch(() => 'Login failed')
     throw new Error(text || 'Login failed')
@@ -79,19 +78,15 @@ export async function login(email: string, password: string): Promise<AuthRespon
 }
 
 export async function signup(firstName: string, lastName: string, email: string, password: string, gender: string, dateOfBirth: string, phoneNumber: string): Promise<AuthResponse> {
-  const response = await fetch(`${BASE_URL}/signup`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ 
-      firstName, 
-      lastName, 
-      email, 
-      password, 
-      gender, 
-      dateOfBirth,
-      phoneNumber
-    }),
-  })
+  const response = await fetch(`${BASE_URL}/signup`, createFetchOptions('POST', { 
+    firstName, 
+    lastName, 
+    email, 
+    password, 
+    gender, 
+    dateOfBirth,
+    phoneNumber
+  }))
   if (!response.ok) {
     const text = await response.text().catch(() => 'Signup failed')
     throw new Error(text || 'Signup failed')

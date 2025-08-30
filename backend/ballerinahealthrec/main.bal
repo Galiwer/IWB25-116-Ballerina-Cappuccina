@@ -448,7 +448,7 @@ public function main() {
 
 @http:ServiceConfig {
     cors: {
-        allowOrigins: ["http://localhost:5173", "http://localhost:3000"],
+        allowOrigins: ["http://localhost:5173", "http://localhost:3000", "https://babapotha.vercel.app", "https://*.choreoapps.dev"],
         allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allowHeaders: ["Content-Type", "Accept", "Authorization"],
         allowCredentials: true
