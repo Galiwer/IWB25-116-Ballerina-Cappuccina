@@ -8,10 +8,10 @@ Based on your Railway MySQL configuration, here are the environment variables to
 
 ```bash
 # Primary connection string (recommended)
-DATABASE_URL="mysql://root:ElBlPtqKfjEFfDBjcYzwfuqcTVTzEHCl@your-railway-private-domain:3306/railway"
+DATABASE_URL="mysql://root:ElBlPtqKfjEFfDBjcYzwfuqcTVTzEHCl@mysql-production-8217.up.railway.app:3306/railway"
 
 # Individual connection parameters (alternative)
-DATABASE_HOST="your-railway-private-domain"
+DATABASE_HOST="mysql-production-8217.up.railway.app"
 DATABASE_PORT="3306"
 DATABASE_NAME="railway"
 DATABASE_USER="root"
@@ -22,7 +22,7 @@ DATABASE_PASSWORD="ElBlPtqKfjEFfDBjcYzwfuqcTVTzEHCl"
 
 ```bash
 # Railway connection details
-RAILWAY_PRIVATE_DOMAIN="your-railway-private-domain"
+RAILWAY_PRIVATE_DOMAIN="mysql-production-8217.up.railway.app"
 RAILWAY_TCP_PROXY_DOMAIN="your-railway-tcp-proxy-domain"
 RAILWAY_TCP_PROXY_PORT="your-railway-tcp-proxy-port"
 MYSQL_DATABASE="railway"
@@ -34,7 +34,7 @@ MYSQLUSER="root"
 
 ### For Private Network (Recommended)
 ```
-mysql://root:ElBlPtqKfjEFfDBjcYzwfuqcTVTzEHCl@your-railway-private-domain:3306/railway?useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true&autoReconnect=true&useUnicode=true&characterEncoding=utf8&cachePrepStmts=true&useServerPrepStmts=true&rewriteBatchedStatements=true&maintainTimeStats=false&elideSetAutoCommits=true&useLocalSessionState=true
+mysql://root:ElBlPtqKfjEFfDBjcYzwfuqcTVTzEHCl@mysql-production-8217.up.railway.app:3306/railway?useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true&autoReconnect=true&useUnicode=true&characterEncoding=utf8&cachePrepStmts=true&useServerPrepStmts=true&rewriteBatchedStatements=true&maintainTimeStats=false&elideSetAutoCommits=true&useLocalSessionState=true
 ```
 
 ### For Public Network (if needed)
