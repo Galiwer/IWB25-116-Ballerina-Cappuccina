@@ -21,12 +21,12 @@ type UserGD record {|
     string date_of_birth;
 |};
 
-// Database configuration - configurable for Choreo
-configurable string dbHost = "mysql-production-8217.up.railway.app";
+// Database configuration - Local XAMPP for development, Railway for production
+configurable string dbHost = "localhost";
 configurable int dbPort = 3306;
-configurable string dbName = "railway";
+configurable string dbName = "babadb";
 configurable string dbUser = "root";
-configurable string dbPassword = "ElBlPtqKfjEFfDBjcYzwfuqcTVTzEHCl";
+configurable string dbPassword = "";
 
 // Function to get MySQL connection parameters
 function getMySQLConnectionParams() returns record {
@@ -450,9 +450,9 @@ public function main() {
 
 @http:ServiceConfig {
     cors: {
-        allowOrigins: ["http://localhost:5173", "http://localhost:3000", "https://babapotha.vercel.app", "https://*.choreoapps.dev"],
+        allowOrigins: ["http://localhost:5173", "http://localhost:3000", "http://192.168.1.25:5173", "http://192.168.1.25:3000", "https://babapotha.vercel.app", "https://*.choreoapps.dev", "https://*.vercel.app"],
         allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        allowHeaders: ["Content-Type", "Accept", "Authorization"],
+        allowHeaders: ["Content-Type", "Accept", "Authorization", "Test-Key"],
         allowCredentials: true
     }
 }

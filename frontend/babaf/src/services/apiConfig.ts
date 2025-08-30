@@ -1,5 +1,5 @@
-// API Configuration for Choreo Backend
-const DEFAULT_BASE_URL = 'https://316dda40-9b55-45ef-bc8e-8204b688dbea-dev.e1-us-east-azure.choreoapis.dev/default/ballerinahealthrec/v1.0'
+// API Configuration - Local Development
+const DEFAULT_BASE_URL = 'http://192.168.1.25:9090/health'
 const BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || DEFAULT_BASE_URL
 
 // Get API key from environment variable
