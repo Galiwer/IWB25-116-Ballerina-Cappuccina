@@ -1,0 +1,27 @@
+[choreo]
+# Choreo deployment configuration
+name = "health-records-api"
+description = "Health Records Management API"
+version = "0.1.0"
+
+[choreo.deployment]
+# Deployment configuration
+port = 9090
+memory = "512Mi"
+cpu = "0.5"
+
+[choreo.environment]
+# Environment variables
+DATABASE_URL = "jdbc:mysql://your-mysql-host:3306/babadb"
+DATABASE_USER = "your-username"
+DATABASE_PASSWORD = "your-password"
+
+[choreo.health]
+# Health check configuration
+path = "/health"
+port = 9090
+initialDelaySeconds = 30
+periodSeconds = 10
+timeoutSeconds = 5
+failureThreshold = 3
+successThreshold = 1

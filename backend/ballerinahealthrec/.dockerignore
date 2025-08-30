@@ -32,5 +32,9 @@ railway.toml
 nixpacks.toml
 build.sh
 
+# Choreo files (keep these for deployment)
+# Choreo.toml
+# CHOREO_DEPLOYMENT.md
+
 # Test files
 *_test.bal

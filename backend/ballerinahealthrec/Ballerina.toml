@@ -2,10 +2,14 @@
 org = "himasha_valantina"
 name = "healthRecords"
 version = "0.1.0"
-distribution = "2201.12.8"
+distribution = "2201.12.7"
 
 [build-options]
 observabilityIncluded = true
+target = "cloud"
+
+[cloud]
+platform = "choreo"
 
 [[dependency]]
 org = "ballerinax"
@@ -18,7 +22,7 @@ name = "uuid"
 version = "1.0.0"
 
 [platform]
-[[platform.java11.dependency]]
+[[platform.java21.dependency]]
 path = "lib/mysql-connector-j-8.3.0.jar"
 groupId = "com.mysql"
 artifactId = "mysql-connector-j"
