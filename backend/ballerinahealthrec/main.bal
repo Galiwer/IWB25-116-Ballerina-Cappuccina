@@ -2,7 +2,6 @@ import ballerina/http;
 import ballerina/io;
 import ballerina/os;
 import ballerina/sql as sql;
-
 import ballerina/time;
 import ballerina/uuid;
 import ballerina/crypto;
@@ -25,6 +24,8 @@ type UserGD record {|
 
 // Database configuration
 final string DATABASE_NAME = "railway";
+
+
 
 // Function to get MySQL connection string
 function getMySQLConnectionString() returns string {
