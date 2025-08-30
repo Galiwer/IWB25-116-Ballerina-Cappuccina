@@ -1,6 +1,5 @@
 import ballerina/http;
 import ballerina/io;
-import ballerina/os;
 import ballerina/sql as sql;
 import ballerina/time;
 import ballerina/uuid;
@@ -27,49 +26,36 @@ final string DATABASE_NAME = "railway";
 
 
 
-// Function to get MySQL connection string
-function getMySQLConnectionString() returns string {
-    // Check for Choreo environment variables first
-    string? databaseUrl = os:getEnv("DATABASE_URL");
-    if databaseUrl is string {
-        return databaseUrl;
-    }
-    
-    // Check for legacy MYSQL_URI
-    string? envUri = os:getEnv("MYSQL_URI");
-    if envUri is string {
-        return envUri;
-    }
-    
-    // Build connection string from individual environment variables
-    string? dbHost = os:getEnv("DATABASE_HOST");
-    string? dbPort = os:getEnv("DATABASE_PORT");
-    string? dbName = os:getEnv("DATABASE_NAME");
-    string? dbUser = os:getEnv("DATABASE_USER");
-    string? dbPassword = os:getEnv("DATABASE_PASSWORD");
-    
-    if dbHost is string && dbUser is string {
-        string host = dbHost;
-        string port = dbPort is string ? dbPort : "3306";
-        string database = dbName is string ? dbName : "railway";
-        string user = dbUser;
-        string password = dbPassword is string ? dbPassword : "";
-        
-        return "jdbc:mysql://" + host + ":" + port + "/" + database + "?user=" + user + "&password=" + password + "&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true&autoReconnect=true&useUnicode=true&characterEncoding=utf8&cachePrepStmts=true&useServerPrepStmts=true&rewriteBatchedStatements=true&maintainTimeStats=false&elideSetAutoCommits=true&useLocalSessionState=true";
-    }
-    
-    // Default to XAMPP MySQL with connection pooling and performance optimizations
-    return "jdbc:mysql://localhost:3306/railway?user=root&password=&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true&autoReconnect=true&useUnicode=true&characterEncoding=utf8&cachePrepStmts=true&useServerPrepStmts=true&rewriteBatchedStatements=true&maintainTimeStats=false&elideSetAutoCommits=true&useLocalSessionState=true";
+// Function to get MySQL connection parameters
+function getMySQLConnectionParams() returns record {
+    string host;
+    int port;
+    string user;
+    string password;
+    string database;
+} {
+    return {
+        host: "mysql-production-8217.up.railway.app",
+        port: 3306,
+        user: "root",
+        password: "ElBlPtqKfjEFfDBjcYzwfuqcTVTzEHCl",
+        database: "railway"
+    };
 }
 
-// Function to get MySQL connection string without database
-function getMySQLConnectionStringNoDB() returns string {
-    string? envUri = os:getEnv("MYSQL_URI");
-    if envUri is string {
-        return envUri;
-    }
-    // Default to XAMPP MySQL without database
-    return "jdbc:mysql://localhost:3306?user=root&password=&useSSL=false&allowPublicKeyRetrieval=true";
+// Function to get MySQL connection parameters without database
+function getMySQLConnectionParamsNoDB() returns record {
+    string host;
+    int port;
+    string user;
+    string password;
+} {
+    return {
+        host: "mysql-production-8217.up.railway.app",
+        port: 3306,
+        user: "root",
+        password: "ElBlPtqKfjEFfDBjcYzwfuqcTVTzEHCl"
+    };
 }
 
 // Bootstrap function to create database if it doesn't exist
@@ -77,7 +63,13 @@ function bootstrapDatabase() returns error? {
     io:println("Bootstrapping database...");
     
     // Connect without specifying database
-    mysql:Client bootstrapClient = check new (getMySQLConnectionStringNoDB());
+    record {
+        string host;
+        int port;
+        string user;
+        string password;
+    } bootstrapConfig = getMySQLConnectionParamsNoDB();
+    mysql:Client bootstrapClient = check new (bootstrapConfig.host, bootstrapConfig.user, bootstrapConfig.password, "", bootstrapConfig.port);
     
     // Create database if it doesn't exist
     sql:ParameterizedQuery createDB = `CREATE DATABASE IF NOT EXISTS railway`;
@@ -428,7 +420,14 @@ public function main() {
         return;
     }
 
-    mysql:Client|error dbClientResult = new (getMySQLConnectionString());
+    record {
+        string host;
+        int port;
+        string user;
+        string password;
+        string database;
+    } dbConfig = getMySQLConnectionParams();
+    mysql:Client|error dbClientResult = new (dbConfig.host, dbConfig.user, dbConfig.password, dbConfig.database, dbConfig.port);
     if dbClientResult is error {
         io:println("Database connection failed: ", dbClientResult.message());
         return;
