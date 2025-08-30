@@ -304,7 +304,7 @@ export const updateDocAppointment = async (appointmentId: string, updates: Parti
     }
     
     // Create a payload structure that exactly matches what the backend expects
-    // The backend expects: string userId, string appointmentId, string? date, string? time, string? place, string? disease, boolean? completed
+    // The backend expects: string userId, string appointmentId, string date, string time, string place, string disease, string doctorName, boolean completed
     const requestPayload = {
       userId,
       appointmentId,
@@ -314,6 +314,7 @@ export const updateDocAppointment = async (appointmentId: string, updates: Parti
       time: updatesWithCompleted.time || '',
       place: updatesWithCompleted.place || '',
       disease: updatesWithCompleted.disease || '',
+      doctorName: 'General Doctor', // Add default doctor name
       completed: updatesWithCompleted.completed !== undefined ? updatesWithCompleted.completed : false
     };
     
@@ -406,6 +407,70 @@ export const updateDocAppointment = async (appointmentId: string, updates: Parti
     }
   } catch (error) {
     console.error('Error in updateDocAppointment:', error);
+    throw error;
+  }
+}
+
+// Toggle appointment status (pending/completed)
+export async function toggleAppointmentStatus(appointmentId: string): Promise<DocAppointment> {
+  console.log('Toggling appointment status with ID:', appointmentId);
+  const userId = getUserId()
+  if (!userId) throw new Error('User not authenticated')
+
+  try {
+    console.log(`Toggling appointment status with ID: ${appointmentId} for user: ${userId}`);
+    
+    const response = await fetch(`${BASE_URL}/toggleAppointmentStatus`, {
+      method: 'PUT',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        userId,
+        appointmentId
+      }),
+      mode: 'cors'
+    })
+    
+    console.log('Toggle response status:', response.status);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Toggle error response:', errorText);
+      throw new Error(`Failed to toggle appointment status: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+    
+    const data = await response.json();
+    console.log('Toggle response data:', data);
+    
+    // The backend should return the updated appointment data
+    // If it doesn't, we'll fetch it
+    if (data && data.newStatus !== undefined) {
+      // Backend returned the new status, construct the updated appointment
+      const updatedAppointment = await getDocAppointments();
+      const appointment = updatedAppointment.find(apt => apt.id === appointmentId);
+      
+      if (!appointment) {
+        throw new Error('Appointment not found after toggle');
+      }
+      
+      console.log('Appointment status toggled successfully');
+      return appointment;
+    } else {
+      // Fallback: fetch all appointments and find the updated one
+      const updatedAppointment = await getDocAppointments();
+      const appointment = updatedAppointment.find(apt => apt.id === appointmentId);
+      
+      if (!appointment) {
+        throw new Error('Appointment not found after toggle');
+      }
+      
+      console.log('Appointment status toggled successfully');
+      return appointment;
+    }
+  } catch (error) {
+    console.error('Error in toggleAppointmentStatus:', error);
     throw error;
   }
 }

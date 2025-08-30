@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { getProfile, saveSpecialNotes, getSpecialNotes } from '../services/profileService';
 import { setAdministered } from '../services/vaccineService';
-import { latest, computeBmi } from '../services/bmiService';
+import { latest, computeBmi, type BmiEntry } from '../services/bmiService';
 import { useVaccineSync } from '../hooks/useVaccineSync';
 import { getDocAppointments, updateDocAppointment } from '../services/doctorAppointmentsService';
 import type { DocAppointment } from '../services/doctorAppointmentsService';
@@ -87,6 +87,8 @@ const Dashboard: React.FC = () => {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [processingAppointment, setProcessingAppointment] = useState<string | null>(null);
   const [showWelcomeNotification, setShowWelcomeNotification] = useState(false);
+  const [lastBmi, setLastBmi] = useState<BmiEntry | null>(null);
+  const [bmiValue, setBmiValue] = useState(0);
   const { vaccines: allVaccines, refreshVaccines } = useVaccineSync();
 
   // Function to load profile data
@@ -132,6 +134,22 @@ const Dashboard: React.FC = () => {
     };
   }, []);
 
+  // Load latest BMI on component mount
+  useEffect(() => {
+    const loadLatestBmi = async () => {
+      try {
+        const data = await latest();
+        setLastBmi(data);
+        if (data) {
+          setBmiValue(computeBmi(data.heightCm, data.weightKg));
+        }
+      } catch (error) {
+        console.error('Error loading latest BMI:', error);
+      }
+    };
+    loadLatestBmi();
+  }, []);
+
   const handleSaveNotes = async () => {
     try {
       await saveSpecialNotes(specialNotes);
@@ -171,10 +189,26 @@ const Dashboard: React.FC = () => {
     } finally { setProcessingVaccine(null); }
   };
 
-  const handleMarkAppointmentDone = async (appointmentId: string, date: string) => {
+  const handleMarkAppointmentDone = async (appointmentId: string) => {
     setProcessingAppointment(appointmentId);
     try {
-      await updateDocAppointment(appointmentId, { date, completed: true });
+      // Get the current appointment data to ensure all required fields are provided
+      const currentAppointments = await getDocAppointments();
+      const currentAppointment = currentAppointments.find(apt => apt.id === appointmentId);
+      
+      if (!currentAppointment) {
+        throw new Error('Appointment not found');
+      }
+      
+      // Update with all current fields, only changing completed status
+      await updateDocAppointment(appointmentId, {
+        date: currentAppointment.date,
+        time: currentAppointment.time,
+        place: currentAppointment.place,
+        disease: currentAppointment.disease,
+        completed: true
+      });
+      
       setAppointmentNotifications(prev => prev.filter(a => a.id !== appointmentId));
       setSuccessMessage('Appointment marked as done!');
       setTimeout(() => setSuccessMessage(null), 3000);
@@ -280,8 +314,7 @@ const Dashboard: React.FC = () => {
   const today = startOfToday();
   const ageInMonths = Math.floor((today.getTime() - birthDate.getTime()) / (1000 * 60 * 60 * 24 * 30.44));
 
-  const lastBmi = latest();
-  const bmiValue = lastBmi ? computeBmi(lastBmi.heightCm, lastBmi.weightKg) : 0;
+
 
   const fullName = `${profile.firstName} ${profile.lastName}`;
 
@@ -427,7 +460,7 @@ const Dashboard: React.FC = () => {
                         </div>
                         <div className="meta">Due {formatDateForDisplay(n.date)}</div>
                         {status === 'status-warn' && (
-                          <button className="vaccine-done-btn" onClick={() => handleMarkAppointmentDone(n.id, n.date)} disabled={processingAppointment === n.id}>
+                          <button className="vaccine-done-btn" onClick={() => handleMarkAppointmentDone(n.id)} disabled={processingAppointment === n.id}>
                             {processingAppointment === n.id ? 'Marking...' : 'Done'}
                           </button>
                         )}

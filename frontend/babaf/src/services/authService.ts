@@ -9,6 +9,7 @@ export type AuthResponse = {
   userId: string
   name: string
   email: string
+  redirectTo?: string
 }
 
 const DEFAULT_BASE_URL = 'http://localhost:9090/health'
@@ -20,22 +21,32 @@ const STORAGE_KEYS = {
 }
 
 function saveSession(auth: AuthResponse) {
+  console.log('Saving session to localStorage:', auth)
   localStorage.setItem(STORAGE_KEYS.userId, auth.userId)
   localStorage.setItem(STORAGE_KEYS.user, JSON.stringify({
     id: auth.userId,
     name: auth.name,
     email: auth.email
   }))
+  console.log('Session saved. userId in localStorage:', localStorage.getItem(STORAGE_KEYS.userId))
 }
 
 export function getStoredSession(): AuthResponse | null {
   const userId = localStorage.getItem(STORAGE_KEYS.userId)
   const userStr = localStorage.getItem(STORAGE_KEYS.user)
-  if (!userId || !userStr) return null
+  console.log('getStoredSession - userId:', userId)
+  console.log('getStoredSession - userStr:', userStr)
+  if (!userId || !userStr) {
+    console.log('getStoredSession - no session found')
+    return null
+  }
   try {
     const user = JSON.parse(userStr) as User
-    return { message: "Session restored", userId, name: user.name, email: user.email }
-  } catch {
+    const session = { message: "Session restored", userId, name: user.name, email: user.email }
+    console.log('getStoredSession - returning session:', session)
+    return session
+  } catch (error) {
+    console.log('getStoredSession - error parsing session:', error)
     return null
   }
 }
@@ -61,6 +72,8 @@ export async function login(email: string, password: string): Promise<AuthRespon
   
   // Handle both direct response and response with body property
   const data = responseData.body ? responseData.body as AuthResponse : responseData as AuthResponse
+  console.log('Processed login data:', data)
+  console.log('Saving session with userId:', data.userId)
   saveSession(data)
   return data
 }

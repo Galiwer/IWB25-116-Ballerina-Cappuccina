@@ -1,35 +1,109 @@
 export type BmiEntry = {
+  id?: string // Record ID from backend
   dateISO: string // YYYY-MM-DD
   heightCm: number
   weightKg: number
+  notes?: string // Notes from backend
 }
 
-const KEY = 'bmi_entries'
+
 const DEFAULT_BASE_URL = 'http://localhost:9090/health'
 const BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || DEFAULT_BASE_URL
 import { getUserId } from './profileService'
 
-export function listBmi(): BmiEntry[] {
-  const text = localStorage.getItem(KEY)
-  if (!text) return []
-  try { return (JSON.parse(text) as BmiEntry[]).sort((a,b)=>a.dateISO.localeCompare(b.dateISO)) } catch { return [] }
+// Get BMI records from backend
+export async function listBmi(): Promise<BmiEntry[]> {
+  try {
+    return await fetchBmiRecords()
+  } catch (error) {
+    console.error('Error fetching BMI records:', error)
+    return []
+  }
 }
 
-export function addBmi(entry: BmiEntry) {
-  const all = listBmi().filter(e => e.dateISO !== entry.dateISO)
-  all.push(entry)
-  localStorage.setItem(KEY, JSON.stringify(all))
+// Add BMI record to backend
+export async function addBmi(entry: BmiEntry): Promise<void> {
+  try {
+    const result = await addBmiRecordToBackend(entry)
+    if (result === null) {
+      throw new Error('Failed to add BMI record')
+    }
+  } catch (error) {
+    console.error('Error adding BMI record:', error)
+    throw error
+  }
 }
 
-export function updateBmi(originalDateISO: string, updated: BmiEntry) {
-  const all = listBmi().filter(e => e.dateISO !== originalDateISO)
-  all.push(updated)
-  localStorage.setItem(KEY, JSON.stringify(all))
+// Update BMI record in backend
+export async function updateBmi(originalDateISO: string, updated: BmiEntry): Promise<void> {
+  try {
+    const userId = getUserId()
+    if (!userId) throw new Error('User not authenticated')
+    
+    // Find the record ID first
+    const allRecords = await fetchBmiRecords()
+    const record = allRecords.find(r => r.dateISO === originalDateISO)
+    
+    if (!record) {
+      throw new Error('BMI record not found')
+    }
+    
+    // Call the backend update endpoint
+    const response = await fetch(`${BASE_URL}/updateBmiRecord`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        userId,
+        recordId: record.id || originalDateISO,
+        weight: updated.weightKg,
+        height: updated.heightCm / 100,
+        date: updated.dateISO,
+        notes: updated.notes || ''
+      }),
+    })
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`Failed to update BMI record: ${response.status} ${errorText}`)
+    }
+  } catch (error) {
+    console.error('Error updating BMI record:', error)
+    throw error
+  }
 }
 
-export function deleteBmi(dateISO: string) {
-  const all = listBmi().filter(e => e.dateISO !== dateISO)
-  localStorage.setItem(KEY, JSON.stringify(all))
+// Delete BMI record from backend
+export async function deleteBmi(dateISO: string): Promise<void> {
+  try {
+    const userId = getUserId()
+    if (!userId) throw new Error('User not authenticated')
+    
+    // Find the record ID first
+    const allRecords = await fetchBmiRecords()
+    const record = allRecords.find(r => r.dateISO === dateISO)
+    
+    if (!record) {
+      throw new Error('BMI record not found')
+    }
+    
+    // Call the backend delete endpoint
+    const response = await fetch(`${BASE_URL}/deleteBmiRecord`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        userId,
+        recordId: record.id || dateISO
+      }),
+    })
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`Failed to delete BMI record: ${response.status} ${errorText}`)
+    }
+  } catch (error) {
+    console.error('Error deleting BMI record:', error)
+    throw error
+  }
 }
 
 // Backend integration
@@ -40,20 +114,36 @@ export async function fetchBmiRecords(): Promise<BmiEntry[]> {
     const response = await fetch(`${BASE_URL}/getBmiRecords?userId=${userId}`, { headers: { Accept: 'application/json' } })
     if (!response.ok) throw new Error(`Failed to fetch BMI records: ${response.status}`)
     const data = await response.json()
+    
+    console.log('DEBUG: BMI records response:', data)
+    
+    // Handle nested response structure from backend
+    let bmiData = data
+    if (data.body && Array.isArray(data.body)) {
+      bmiData = data.body
+    }
+    
     // Map backend fields to frontend BmiEntry
-    const mapped: BmiEntry[] = (Array.isArray(data) ? data : []).map((rec: any) => {
+    const mapped: BmiEntry[] = (Array.isArray(bmiData) ? bmiData : []).map((rec: any) => {
+      console.log('DEBUG: Processing BMI record:', rec)
+      
       // Normalize date
       let dateISO = ''
-      const created = rec.created_at || rec.createdAt || rec.date || rec.created || ''
+      const created = rec.createdAt || rec.created_at || rec.date || rec.created || ''
       if (typeof created === 'string') {
         dateISO = created.includes('T') ? created.split('T')[0] : created
       }
+      
       return {
+        id: rec.id?.toString() || '',
         dateISO,
         heightCm: Number(rec.height) * 100 || 0,
         weightKg: Number(rec.weight) || 0,
+        notes: rec.notes || ''
       }
     }).filter((e: BmiEntry) => !!e.dateISO)
+    
+    console.log('DEBUG: Mapped BMI records:', mapped)
     return mapped.sort((a,b)=>a.dateISO.localeCompare(b.dateISO))
   } catch (e) {
     console.error('fetchBmiRecords error', e)
@@ -69,6 +159,7 @@ export async function addBmiRecordToBackend(entry: BmiEntry): Promise<number | n
     weight: entry.weightKg,
     height: entry.heightCm / 100,
     date: entry.dateISO,
+    notes: entry.notes || ''
   }
   try {
     const response = await fetch(`${BASE_URL}/addBmiRecord`, {
@@ -100,8 +191,8 @@ export function classifyBmi(bmi: number): { label: string; color: 'danger' | 'ok
   return { label: 'obese', color: 'danger' }
 }
 
-export function latest(): BmiEntry | null {
-  const all = listBmi()
+export async function latest(): Promise<BmiEntry | null> {
+  const all = await listBmi()
   return all.length ? all[all.length - 1] : null
 }
 

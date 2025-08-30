@@ -970,6 +970,69 @@
   transform: translateY(-1px);
 }
 
+/* Edit modal specific button styles */
+.cancel-btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 2.5vmin;
+  border-radius: 1vmin;
+  font-size: clamp(0.9rem, 2.5vmin, 1.1rem);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex: 1;
+}
+
+.cancel-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  transform: translateY(-1px);
+}
+
+.save-btn {
+  background: linear-gradient(135deg, var(--accent), #7C8BFF);
+  color: white;
+  border: none;
+  padding: 2.5vmin;
+  border-radius: 1vmin;
+  font-size: clamp(0.9rem, 2.5vmin, 1.1rem);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 15px rgba(74, 144, 226, 0.3);
+  flex: 1;
+}
+
+.save-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(74, 144, 226, 0.4);
+}
+
+/* Textarea styles */
+.bmi-form textarea {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 1vmin;
+  padding: 2vmin;
+  color: white;
+  font-size: clamp(0.9rem, 2.5vmin, 1.1rem);
+  font-family: inherit;
+  resize: vertical;
+  min-height: 8vmin;
+  transition: all 0.2s ease;
+}
+
+.bmi-form textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.bmi-form textarea::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
 /* Responsive modal adjustments */
 @media (max-width: 767px) {
   .bmi-modal {

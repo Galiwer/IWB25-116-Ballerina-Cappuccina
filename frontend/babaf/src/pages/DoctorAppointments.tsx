@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import SideNav from '../components/SideNav';
 import './doctorAppointments.css';
-import { getDocAppointments, addDocAppointment, updateDocAppointment, deleteDocAppointment, type DocAppointment } from '../services/doctorAppointmentsService';
+import { getDocAppointments, addDocAppointment, updateDocAppointment, deleteDocAppointment, toggleAppointmentStatus, type DocAppointment } from '../services/doctorAppointmentsService';
 import { login } from '../services/authService';
 
 const DoctorAppointments: React.FC = () => {
@@ -65,25 +65,15 @@ const DoctorAppointments: React.FC = () => {
   };
 
   const handleMarkAsDone = async (id: string, currentCompleted: boolean = false) => {
-    const appointment = appointments.find(apt => apt.id === id);
-    if (!appointment) return;
-
     try {
-      console.log('Marking appointment as', currentCompleted ? 'pending' : 'done', 'ID:', id);
-      // Include all required fields from the existing appointment
-      const updatedApt = await updateDocAppointment(id, { 
-        completed: !currentCompleted,
-        date: appointment.date,
-        time: appointment.time || '',
-        place: appointment.place || '',
-        disease: appointment.disease || ''
-      });
-      console.log('Updated appointment:', updatedApt);
+      console.log('Toggling appointment status for ID:', id, 'Current status:', currentCompleted);
+      const updatedApt = await toggleAppointmentStatus(id);
+      console.log('Appointment status toggled successfully:', updatedApt);
       setAppointments(prev => prev.map(apt => apt.id === id ? { ...updatedApt, date: formatDate(updatedApt.date) } : apt));
     } catch (error) {
-      console.error('Error marking as done:', error);
+      console.error('Error toggling appointment status:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
-      alert(`Failed to update appointment status: ${errorMessage}`);
+      alert(`Failed to toggle appointment status: ${errorMessage}`);
     }
   };
 

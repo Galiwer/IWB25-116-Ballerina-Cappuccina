@@ -185,7 +185,7 @@ function VaccinesPage() {
                       </div>
                       <div className="vaccine-schedule">
                         <span className="label">Scheduled:</span>
-                        <span className="value">{v.offsetMonths} months after birth</span>
+                        <span className="value">{v.offsetMonths === 0 ? 'At birth' : `${v.offsetMonths} months after birth`}</span>
                       </div>
                     </div>
                     
@@ -254,7 +254,7 @@ function VaccinesPage() {
                       </div>
                       <div className="vaccine-schedule">
                         <span className="label">Schedule:</span>
-                        <span className="value">{v.offsetMonths} months after birth</span>
+                        <span className="value">{v.offsetMonths === 0 ? 'At birth' : `${v.offsetMonths} months after birth`}</span>
                       </div>
                     </div>
                     

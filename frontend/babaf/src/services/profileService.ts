@@ -82,6 +82,15 @@ export async function getUserProfile(): Promise<UserProfile | null> {
     const responseData = await response.json()
     console.log('Profile response data:', responseData)
     
+    // Check if the response has a value property (from backend structure)
+    if (responseData.value) {
+      // Handle double-nested value case: {"value":{"value":{...}}}
+      if (responseData.value.value) {
+        return responseData.value.value as UserProfile
+      }
+      return responseData.value as UserProfile
+    }
+    
     // Check if the response has a body property (from backend structure)
     if (responseData.body) {
       return responseData.body as UserProfile
@@ -160,10 +169,10 @@ export async function saveSpecialNotes(notes: string): Promise<void> {
   if (!userId) throw new Error('User not authenticated')
 
   try {
-    const response = await fetch(`${BASE_URL}/updateSpecialNotes`, {
-      method: 'PUT',
+    const response = await fetch(`${BASE_URL}/addSpecialNotes`, {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, specialNotes: notes }),
+      body: JSON.stringify({ userId, notes }),
     })
 
     if (!response.ok) {
@@ -188,7 +197,20 @@ export async function getSpecialNotes(): Promise<string> {
     
     if (response.ok) {
       const data = await response.json()
-      const notes = data.body || data.specialNotes || ''
+      console.log('Special notes response data:', data)
+      
+      // Extract notes from the correct field
+      let notes = ''
+      if (data.notes !== undefined) {
+        notes = data.notes
+      } else if (data.body) {
+        notes = data.body
+      } else if (data.specialNotes) {
+        notes = data.specialNotes
+      }
+      
+      console.log('Extracted notes:', notes)
+      
       // Save to localStorage as backup
       localStorage.setItem('special_notes', notes)
       return notes

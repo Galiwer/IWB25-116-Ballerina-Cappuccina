@@ -112,7 +112,7 @@ function Auth() {
 
       {isModalOpen ? (
         <AuthModal onClose={() => setIsModalOpen(false)}>
-          {authMode === 'login' ? <LoginForm /> : <SignupForm />}
+          {authMode === 'login' ? <LoginForm navigate={navigate} /> : <SignupForm navigate={navigate} />}
         </AuthModal>
       ) : null}
     </section>
@@ -133,7 +133,7 @@ function isStrongPassword(password: string): boolean {
   return strongPasswordRegex.test(password)
 }
 
-function LoginForm() {
+function LoginForm({ navigate }: { navigate: (path: string) => void }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -158,7 +158,7 @@ function LoginForm() {
     try {
       await login(email, password)
       sessionStorage.setItem('onboard_needed', '1')
-      window.location.href = '/dashboard'
+      navigate('/dashboard')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
     } finally {
@@ -209,7 +209,7 @@ function LoginForm() {
   )
 }
 
-function SignupForm() {
+function SignupForm({ navigate }: { navigate: (path: string) => void }) {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
@@ -238,10 +238,15 @@ function SignupForm() {
     setLoading(true)
     try {
       // Call the signup function with all user details including phone number
-      await signup(firstName, lastName, email, password, gender, dateOfBirth, phoneNumber)
+      const data = await signup(firstName, lastName, email, password, gender, dateOfBirth, phoneNumber)
       
-      // Redirect to already-vaccinated page after successful signup
-      window.location.href = '/already-vaccinated'
+      // Check if backend wants to redirect to already-vaccinated page
+      if (data.redirectTo === 'already-vaccinated') {
+        navigate('/already-vaccinated')
+      } else {
+        // Fallback redirect
+        navigate('/already-vaccinated')
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Signup failed')
     } finally {

@@ -3,6 +3,7 @@ import { getProfile } from './profileService'
 
 // Backend vaccine record structure
 export type BackendVaccineRecord = {
+  id?: string
   name: string
   dose: string
   received: boolean
@@ -58,12 +59,21 @@ export async function getVaccinesFromBackend(): Promise<BackendVaccineRecord[]> 
 // Convert backend vaccine records to frontend format
 function convertBackendToFrontend(backendVaccines: BackendVaccineRecord[]): VaccineRecord[] {
   return backendVaccines.map((vaccine) => {
-    const inferred = typeof vaccine.offsetMonths === 'number' ? vaccine.offsetMonths : inferOffsetMonthsFromDose(vaccine.dose, vaccine.name) ?? 0
+    // Use the backend offsetMonths if available, otherwise try to infer from dose/name
+    let offsetMonths = 0;
+    if (typeof vaccine.offsetMonths === 'number' && vaccine.offsetMonths > 0) {
+      offsetMonths = vaccine.offsetMonths;
+    } else {
+      // Try to infer from dose/name if offsetMonths is not set
+      const inferred = inferOffsetMonthsFromDose(vaccine.dose, vaccine.name);
+      offsetMonths = inferred ?? 0;
+    }
+    
     return {
-      id: `${vaccine.name}::${typeof vaccine.dose === 'string' ? vaccine.dose : ''}`,
+      id: vaccine.id || `${vaccine.name}::${typeof vaccine.dose === 'string' ? vaccine.dose : ''}`, // Use backend id if available
       name: vaccine.name,
       company: typeof vaccine.dose === 'string' ? vaccine.dose : '',
-      offsetMonths: inferred,
+      offsetMonths: offsetMonths,
       isCustom: !!vaccine.isCustom,
       administered: vaccine.received,
       administeredDateISO: vaccine.receivedDate,
@@ -147,9 +157,14 @@ export async function updateVaccine(id: string, changes: Partial<Pick<VaccineRec
   const userId = getUserId()
   if (!userId) throw new Error('User not authenticated')
 
+  console.log('DEBUG: updateVaccine called with id:', id, 'changes:', changes)
+
   // Get the vaccine details
   const vaccines = await listVaccines()
+  console.log('DEBUG: Available vaccines for update:', vaccines.map(v => ({ id: v.id, name: v.name, isCustom: v.isCustom })))
+  
   const vaccine = vaccines.find(v => v.id === id)
+  console.log('DEBUG: Found vaccine for update:', vaccine)
   
   if (!vaccine) {
     console.error('Vaccine not found')
@@ -173,6 +188,7 @@ export async function updateVaccine(id: string, changes: Partial<Pick<VaccineRec
         dose: vaccine.company,
         newName: changes.name || vaccine.name,
         newDose: changes.company || vaccine.company,
+        newOffsetMonths: changes.offsetMonths || vaccine.offsetMonths,
       }),
     })
     
@@ -193,9 +209,14 @@ export async function deleteVaccine(id: string): Promise<void> {
   const userId = getUserId()
   if (!userId) throw new Error('User not authenticated')
 
+  console.log('DEBUG: deleteVaccine called with id:', id)
+
   // Get the vaccine details
   const vaccines = await listVaccines()
+  console.log('DEBUG: Available vaccines:', vaccines.map(v => ({ id: v.id, name: v.name, isCustom: v.isCustom })))
+  
   const vaccine = vaccines.find(v => v.id === id)
+  console.log('DEBUG: Found vaccine:', vaccine)
   
   if (!vaccine) {
     throw new Error('Vaccine not found')
@@ -214,7 +235,7 @@ export async function deleteVaccine(id: string): Promise<void> {
       body: JSON.stringify({ 
         userId, 
         name: vaccine.name,
-        dose: vaccine.company
+        dose: vaccine.company  // This maps to the backend's 'dose' field
       }),
     })
     

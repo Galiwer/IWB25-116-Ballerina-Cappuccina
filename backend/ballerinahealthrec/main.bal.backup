@@ -338,7 +338,6 @@ function initializeDatabase(mysql:Client dbClient) returns error? {
             time TIME NOT NULL,
             place VARCHAR(255) NOT NULL,
             disease VARCHAR(255) NOT NULL,
-            doctor_name VARCHAR(255) DEFAULT 'General Doctor',
             completed BOOLEAN DEFAULT FALSE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -361,12 +360,6 @@ function initializeDatabase(mysql:Client dbClient) returns error? {
 
     sql:ExecutionResult|sql:Error r6 = dbClient->execute(createDocAppointmentsTable);
     if r6 is sql:Error { return r6; }
-
-    // Add missing columns if they don't exist (migration)
-    sql:ExecutionResult|sql:Error addPlaceColumn = dbClient->execute(`ALTER TABLE doc_appointments ADD COLUMN IF NOT EXISTS place VARCHAR(255) NOT NULL DEFAULT 'Unknown Location'`);
-    if addPlaceColumn is sql:Error {
-        io:println("Note: place column may already exist or migration failed: " + addPlaceColumn.toString());
-    }
 
     io:println("All tables created successfully");
 }
@@ -485,29 +478,11 @@ service /health on new http:Listener(9090) {
         
         // Automatically assign default vaccines based on gender
         VaccineRecord[] defaultVaccines = getDefaultVaccines(newUser.gender);
-        io:println("Adding", defaultVaccines.length(), "default vaccines for gender:", newUser.gender);
-        
         foreach VaccineRecord vaccine in defaultVaccines {
-            // Calculate due date based on offset months from birth date
-            string? dueDate = ();
-            if (vaccine.offsetMonths is int && vaccine.offsetMonths >= 0) {
-                // For now, use birth date as base - in production you'd add months properly
-                dueDate = newUser.dateOfBirth;
-            }
-            
-            // Use the correct field names that match the database table
-            sql:ParameterizedQuery vaccineQuery;
-            if (dueDate is string) {
-                vaccineQuery = `INSERT INTO vaccine_records (user_id, name, dose, due_date, is_custom, offset_months, created_at) VALUES (${userId}, ${vaccine.name}, ${vaccine.dose}, ${dueDate}, ${vaccine.isCustom}, ${vaccine.offsetMonths ?: 0}, NOW())`;
-            } else {
-                vaccineQuery = `INSERT INTO vaccine_records (user_id, name, dose, is_custom, offset_months, created_at) VALUES (${userId}, ${vaccine.name}, ${vaccine.dose}, ${vaccine.isCustom}, ${vaccine.offsetMonths ?: 0}, NOW())`;
-            }
-            
+            sql:ParameterizedQuery vaccineQuery = `INSERT INTO vaccine_records (user_id, name, dose, received, received_date, is_custom, offset_months, created_at) VALUES (${userId}, ${vaccine.name}, ${vaccine.dose}, ${vaccine.received}, ${vaccine.receivedDate ?: ""}, ${vaccine.isCustom}, ${vaccine.offsetMonths ?: 0}, NOW())`;
             sql:ExecutionResult|sql:Error vaccineResult = dbClient->execute(vaccineQuery);
             if vaccineResult is sql:Error {
-                io:println("Warning: Could not insert vaccine record for", vaccine.name, ":", vaccineResult.message());
-            } else {
-                io:println("Successfully added vaccine:", vaccine.name, "for user:", userId);
+                io:println("Warning: Could not insert vaccine record for", vaccine.name, ":", vaccineResult);
             }
         }
         
@@ -656,29 +631,73 @@ service /health on new http:Listener(9090) {
         }
         mysql:Client dbClient = <mysql:Client>globalClient;
         
-        // First ensure we're using the correct database
-        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE babadb`);
-        if useDbResult is sql:Error {
-            return <http:InternalServerError>{ body: { message: "Database connection error" } };
-        }
+        io:println("DEBUG: getVaccines called for userId: " + userId);
         
-        sql:ParameterizedQuery vq = `SELECT id, user_id, name, dose, due_date, is_custom, created_at, completed_date, offset_months FROM babadb.vaccine_records WHERE user_id = ${userId}`;
+        sql:ParameterizedQuery vq = `SELECT id, user_id, name, dose, due_date, is_custom, created_at, completed_date FROM vaccine_records WHERE user_id = ${userId}`;
+        io:println("DEBUG: SQL Query executed for userId: " + userId);
+        io:println("DEBUG: Full SQL Query: SELECT id, user_id, name, dose, due_date, is_custom, created_at, completed_date FROM vaccine_records WHERE user_id = " + userId);
         
         stream<record {}, sql:Error?> s = dbClient->query(vq);
         record {}[] vaccines = [];
+        
+        // Debug: Check if stream has errors
+        io:println("DEBUG: Starting to process query results...");
         
         while true {
             record {}|sql:Error? row = s.next();
             if row is record {} { 
                 vaccines.push(row); 
+                io:println("DEBUG: Found vaccine row: " + row.toString());
+                io:println("DEBUG: Row keys: " + row.keys().toString());
             } else if row is sql:Error {
+                io:println("DEBUG: SQL Error encountered: " + row.toString());
                 break;
             } else { 
+                io:println("DEBUG: End of stream reached");
                 break; 
             }
         }
         
+        io:println("DEBUG: Total vaccines found: " + vaccines.length().toString());
+        
+        // Debug: Let's also check what's actually in the database for this user
         if vaccines.length() == 0 {
+            io:println("DEBUG: No vaccines found for userId: " + userId);
+            io:println("DEBUG: Let's check what's in the vaccine_records table...");
+            
+            sql:ParameterizedQuery debugQuery = `SELECT COUNT(*) as total FROM vaccine_records`;
+            stream<record {}, sql:Error?> debugStream = dbClient->query(debugQuery);
+            record {}[] debugResults = [];
+            while true {
+                record {}|sql:Error? debugRow = debugStream.next();
+                if debugRow is record {} { 
+                    debugResults.push(debugRow); 
+                } else { 
+                    break; 
+                }
+            }
+            
+            if debugResults.length() > 0 {
+                record {} debugResult = debugResults[0];
+                io:println("DEBUG: Total records in vaccine_records table: " + debugResult.toString());
+            }
+            
+            // Check specific user's vaccines with a different approach
+            sql:ParameterizedQuery userVaccinesQuery = `SELECT * FROM vaccine_records WHERE user_id = ${userId}`;
+            stream<record {}, sql:Error?> userVaccinesStream = dbClient->query(userVaccinesQuery);
+            record {}[] userVaccines = [];
+            while true {
+                record {}|sql:Error? userVaccineRow = userVaccinesStream.next();
+                if userVaccineRow is record {} { 
+                    userVaccines.push(userVaccineRow); 
+                    io:println("DEBUG: Direct query found vaccine: " + userVaccineRow.toString());
+                } else { 
+                    break; 
+                }
+            }
+            
+            io:println("DEBUG: Direct query found " + userVaccines.length().toString() + " vaccines for user");
+            
             return <http:Ok>{ body: [] };
         }
         
@@ -692,26 +711,30 @@ service /health on new http:Listener(9090) {
             boolean isCustom;
             string createdAt;
             string? completedDate;
-            int? offsetMonths;
         }[] transformedVaccines = [];
         
         foreach record {} vaccine in vaccines {
+            io:println("DEBUG: Processing vaccine: " + vaccine.toString());
+            
             // Handle the nested 'value' field structure from MySQL results
             record {} vaccineData = vaccine;
             if vaccine.hasKey("value") {
                 vaccineData = <record {}>vaccine["value"];
+                io:println("DEBUG: Found nested 'value' field, using vaccineData");
             }
             
-            // Extract and transform fields based on actual table structure
-            string id = vaccineData["id"] is int ? vaccineData["id"].toString() : (vaccineData["id"] is string ? <string>vaccineData["id"] : "");
+            // Extract and transform fields
+            string id = vaccineData["id"] is string ? <string>vaccineData["id"] : "";
             string dbUserId = vaccineData["user_id"] is string ? <string>vaccineData["user_id"] : "";
             string name = vaccineData["name"] is string ? <string>vaccineData["name"] : "";
             string dose = vaccineData["dose"] is string ? <string>vaccineData["dose"] : "";
-            string dueDate = vaccineData["due_date"] is string ? <string>vaccineData["due_date"] : "";
+            boolean received = vaccineData["received"] is boolean ? <boolean>vaccineData["received"] : false;
+            string? receivedDate = vaccineData["received_date"] is string ? <string>vaccineData["received_date"] : ();
             boolean isCustom = vaccineData["is_custom"] is boolean ? <boolean>vaccineData["is_custom"] : false;
-            string createdAt = vaccineData["created_at"] is string ? <string>vaccineData["created_at"] : "";
-            string? completedDate = vaccineData["completed_date"] is string ? <string>vaccineData["completed_date"] : "";
             int? offsetMonths = vaccineData["offset_months"] is int ? <int>vaccineData["offset_months"] : ();
+            string? dueDate = vaccineData["due_date"] is string ? <string>vaccineData["due_date"] : ();
+            
+            io:println("DEBUG: Transformed vaccine - id: " + id + ", name: " + name + ", dose: " + dose + ", dueDate: " + dueDate);
             
             record {
                 string id;
@@ -722,9 +745,6 @@ service /health on new http:Listener(9090) {
                 boolean isCustom;
                 string createdAt;
                 string? completedDate;
-                int? offsetMonths;
-                boolean received;
-                string? receivedDate;
             } transformedVaccine = {
                 id: id,
                 userId: dbUserId,
@@ -733,68 +753,69 @@ service /health on new http:Listener(9090) {
                 dueDate: dueDate,
                 isCustom: isCustom,
                 createdAt: createdAt,
-                completedDate: completedDate,
-                offsetMonths: offsetMonths,
-                received: completedDate is string && completedDate != "",
-                receivedDate: completedDate is string ? completedDate : ()
+                completedDate: completedDate
             };
             
             transformedVaccines.push(transformedVaccine);
         }
         
+        io:println("DEBUG: Returning " + transformedVaccines.length().toString() + " transformed vaccines");
         return <http:Ok>{ body: transformedVaccines };
     }
 
-    // Update vaccine record endpoint (frontend compatible)
-    resource function put updateVaccine(@http:Payload record {
-        string userId;
-        string name;
-        string dose;
-        string newName;
-        string newDose;
-        int? newOffsetMonths;
+    // Update vaccine record endpoint
+    resource function put updateVaccine(string userId, string vaccineId, @http:Payload record {
+        string? name;
+        string? dose;
+        boolean? received;
+        string? receivedDate;
+        boolean? isCustom;
+        int? offsetMonths;
+        string? dueDate;
     } vaccineData) returns http:Ok|http:NotFound|http:InternalServerError|error {
         if globalClient is () {
             return <http:InternalServerError>{ body: { message: "Database not initialized" } };
         }
         mysql:Client dbClient = <mysql:Client>globalClient;
         
-
-        
-        // First, check if the vaccine exists
-        sql:ParameterizedQuery checkQuery = `SELECT COUNT(*) as count FROM vaccine_records WHERE user_id = ${vaccineData.userId} AND name = ${vaccineData.name} AND dose = ${vaccineData.dose}`;
-        
-        stream<record {}, sql:Error?> checkResult = dbClient->query(checkQuery);
-        record {}|sql:Error? checkRow = checkResult.next();
-        if checkRow is sql:Error {
-            return <http:InternalServerError>{ body: { message: "Database error" } };
-        }
-        record {} row = <record {}>checkRow;
-        record {} rowData = row;
-        if row.hasKey("value") {
-            rowData = <record {}>row["value"];
-        }
-        int count = rowData["count"] is int ? <int>rowData["count"] : 0;
-        
-        if count == 0 {
-            return <http:NotFound>{ body: { message: "Vaccine not found" } };
-        }
+        io:println("DEBUG: updateVaccine called for userId: " + userId + ", vaccineId: " + vaccineId);
+        io:println("DEBUG: Update data: " + vaccineData.toString());
         
         // Build dynamic UPDATE query based on provided fields
+        string updateQuery = "UPDATE vaccine_records SET ";
         string[] updateFields = [];
         
-        if vaccineData.newName != vaccineData.name {
-            updateFields.push("name = '" + vaccineData.newName + "'");
+        if vaccineData.name is string {
+            string nameStr = <string>vaccineData.name;
+            updateFields.push("name = '" + nameStr + "'");
         }
-        if vaccineData.newDose != vaccineData.dose {
-            updateFields.push("dose = '" + vaccineData.newDose + "'");
+        if vaccineData.dose is string {
+            string doseStr = <string>vaccineData.dose;
+            updateFields.push("dose = '" + doseStr + "'");
         }
-        if (vaccineData.newOffsetMonths is int) {
-            updateFields.push("offset_months = " + vaccineData.newOffsetMonths.toString());
+        if vaccineData.received is boolean {
+            boolean receivedBool = <boolean>vaccineData.received;
+            updateFields.push("received = " + (receivedBool ? "1" : "0"));
+        }
+        if vaccineData.receivedDate is string {
+            string receivedDateStr = <string>vaccineData.receivedDate;
+            updateFields.push("received_date = '" + receivedDateStr + "'");
+        }
+        if vaccineData.isCustom is boolean {
+            boolean isCustomBool = <boolean>vaccineData.isCustom;
+            updateFields.push("is_custom = " + (isCustomBool ? "1" : "0"));
+        }
+        if vaccineData.offsetMonths is int {
+            int offsetMonthsInt = <int>vaccineData.offsetMonths;
+            updateFields.push("offset_months = " + offsetMonthsInt.toString());
+        }
+        if vaccineData.dueDate is string {
+            string dueDateStr = <string>vaccineData.dueDate;
+            updateFields.push("due_date = '" + dueDateStr + "'");
         }
         
         if updateFields.length() == 0 {
-            return <http:InternalServerError>{ body: { message: "No changes to update" } };
+            return <http:InternalServerError>{ body: { message: "No fields to update" } };
         }
         
         // Build the query string manually since join() is not available
@@ -806,52 +827,25 @@ service /health on new http:Listener(9090) {
             fieldsString = fieldsString + updateFields[i];
         }
         
-        // Try using a different approach - build the query without string interpolation
-        // Use a simpler approach with individual field updates
-        sql:ExecutionResult|sql:Error result;
+        updateQuery = updateQuery + fieldsString + " WHERE id = " + vaccineId + " AND user_id = " + userId;
+        io:println("DEBUG: SQL Update query: " + updateQuery);
         
-        if vaccineData.newName != vaccineData.name && vaccineData.newDose != vaccineData.dose && (vaccineData.newOffsetMonths is int) {
-            // Update name, dose, and offsetMonths
-            sql:ParameterizedQuery updateQuery = `UPDATE babadb.vaccine_records SET name = ${vaccineData.newName}, dose = ${vaccineData.newDose}, offset_months = ${vaccineData.newOffsetMonths} WHERE name = ${vaccineData.name} AND dose = ${vaccineData.dose} AND user_id = ${vaccineData.userId}`;
-            result = dbClient->execute(updateQuery);
-        } else if vaccineData.newName != vaccineData.name && vaccineData.newDose != vaccineData.dose {
-            // Update both name and dose
-            sql:ParameterizedQuery updateQuery = `UPDATE babadb.vaccine_records SET name = ${vaccineData.newName}, dose = ${vaccineData.newDose} WHERE name = ${vaccineData.name} AND dose = ${vaccineData.dose} AND user_id = ${vaccineData.userId}`;
-            result = dbClient->execute(updateQuery);
-        } else if vaccineData.newName != vaccineData.name && (vaccineData.newOffsetMonths is int) {
-            // Update name and offsetMonths
-            sql:ParameterizedQuery updateQuery = `UPDATE babadb.vaccine_records SET name = ${vaccineData.newName}, offset_months = ${vaccineData.newOffsetMonths} WHERE name = ${vaccineData.name} AND dose = ${vaccineData.dose} AND user_id = ${vaccineData.userId}`;
-            result = dbClient->execute(updateQuery);
-        } else if vaccineData.newDose != vaccineData.dose && (vaccineData.newOffsetMonths is int) {
-            // Update dose and offsetMonths
-            sql:ParameterizedQuery updateQuery = `UPDATE babadb.vaccine_records SET dose = ${vaccineData.newDose}, offset_months = ${vaccineData.newOffsetMonths} WHERE name = ${vaccineData.name} AND dose = ${vaccineData.dose} AND user_id = ${vaccineData.userId}`;
-            result = dbClient->execute(updateQuery);
-        } else if vaccineData.newName != vaccineData.name {
-            // Update only name
-            sql:ParameterizedQuery updateQuery = `UPDATE babadb.vaccine_records SET name = ${vaccineData.newName} WHERE name = ${vaccineData.name} AND dose = ${vaccineData.dose} AND user_id = ${vaccineData.userId}`;
-            result = dbClient->execute(updateQuery);
-        } else if vaccineData.newDose != vaccineData.dose {
-            // Update only dose
-            sql:ParameterizedQuery updateQuery = `UPDATE babadb.vaccine_records SET dose = ${vaccineData.newDose} WHERE name = ${vaccineData.name} AND dose = ${vaccineData.dose} AND user_id = ${vaccineData.userId}`;
-            result = dbClient->execute(updateQuery);
-        } else if (vaccineData.newOffsetMonths is int) {
-            // Update only offsetMonths
-            sql:ParameterizedQuery updateQuery = `UPDATE babadb.vaccine_records SET offset_months = ${vaccineData.newOffsetMonths} WHERE name = ${vaccineData.name} AND dose = ${vaccineData.dose} AND user_id = ${vaccineData.userId}`;
-            result = dbClient->execute(updateQuery);
-        } else {
-            // No changes
-            result = <sql:ExecutionResult>{affectedRowCount: 0, lastInsertId: 0};
-        }
+        sql:ExecutionResult|sql:Error result = dbClient->execute(`UPDATE vaccine_records SET ${fieldsString} WHERE id = ${vaccineId} AND user_id = ${userId}`);
         if result is sql:Error {
+            io:println("DEBUG: Error updating vaccine: " + result.toString());
             return <http:InternalServerError>{ body: { message: "Failed to update vaccine record" } };
         }
         
+        io:println("DEBUG: Vaccine updated successfully");
         return <http:Ok>{ body: { message: "Vaccine updated successfully" } };
     }
 
     // Get default vaccines endpoint
     resource function get getDefaultVaccines(string gender) returns http:Ok|http:InternalServerError|error {
+        io:println("DEBUG: getDefaultVaccines called for gender: " + gender);
+        
         VaccineRecord[] defaultVaccines = getDefaultVaccines(gender);
+        io:println("DEBUG: Returning " + defaultVaccines.length().toString() + " default vaccines for " + gender);
         
         return <http:Ok>{ body: defaultVaccines };
     }
@@ -860,6 +854,9 @@ service /health on new http:Listener(9090) {
     resource function post createCustomVaccine(string userId, @http:Payload record {
         string name;
         string dose;
+        boolean received;
+        string? receivedDate;
+        int? offsetMonths;
         string? dueDate;
     } vaccineData) returns http:Ok|http:InternalServerError|error {
         if globalClient is () {
@@ -867,64 +864,20 @@ service /health on new http:Listener(9090) {
         }
         mysql:Client dbClient = <mysql:Client>globalClient;
         
-        sql:ParameterizedQuery insertQuery = `INSERT INTO vaccine_records (user_id, name, dose, due_date, is_custom, created_at) VALUES (${userId}, ${vaccineData.name}, ${vaccineData.dose}, ${vaccineData.dueDate ?: ""}, true, NOW())`;
+        io:println("DEBUG: createCustomVaccine called for userId: " + userId);
+        io:println("DEBUG: Vaccine data: " + vaccineData.toString());
+        
+        sql:ParameterizedQuery insertQuery = `INSERT INTO vaccine_records (user_id, name, dose, received, received_date, is_custom, offset_months, due_date, created_at) VALUES (${userId}, ${vaccineData.name}, ${vaccineData.dose}, ${vaccineData.received}, ${vaccineData.receivedDate ?: ""}, true, ${vaccineData.offsetMonths ?: 0}, ${vaccineData.dueDate ?: ""}, NOW())`;
+        io:println("DEBUG: SQL Insert query executed for userId: " + userId);
         
         sql:ExecutionResult|sql:Error result = dbClient->execute(insertQuery);
         if result is sql:Error {
+            io:println("DEBUG: Error creating custom vaccine: " + result.toString());
             return <http:InternalServerError>{ body: { message: "Failed to create custom vaccine record" } };
         }
         
+        io:println("DEBUG: Custom vaccine created successfully");
         return <http:Ok>{ body: { message: "Custom vaccine created successfully" } };
-    }
-
-    // Mark vaccine as received endpoint
-    resource function put markVaccineReceived(@http:Payload record {
-        string userId;
-        string name;
-        string dose;
-        boolean received;
-        string? receivedDate;
-    } vaccineData) returns http:Ok|http:BadRequest|http:InternalServerError|error {
-        if globalClient is () {
-            return <http:InternalServerError>{ body: { message: "Database not initialized" } };
-        }
-        mysql:Client dbClient = <mysql:Client>globalClient;
-        
-        // First ensure we're using the correct database
-        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE babadb`);
-        if useDbResult is sql:Error {
-            return <http:InternalServerError>{ body: { message: "Database connection error" } };
-        }
-        
-        // Since the table doesn't have 'received' or 'received_date' columns,
-        // we'll use 'completed_date' to track when a vaccine was received
-        string? completedDate = ();
-        if (vaccineData.received && vaccineData.receivedDate is string) {
-            completedDate = vaccineData.receivedDate;
-        } else if (vaccineData.received) {
-            // If received but no date provided, use current date
-            completedDate = time:utcNow().toString();
-        }
-        
-        // Update the vaccine record using parameterized queries
-        sql:ExecutionResult|sql:Error result;
-        if (vaccineData.received && completedDate is string) {
-            sql:ParameterizedQuery updateQuery = `UPDATE babadb.vaccine_records SET completed_date = ${completedDate} WHERE user_id = ${vaccineData.userId} AND name = ${vaccineData.name} AND dose = ${vaccineData.dose}`;
-            result = dbClient->execute(updateQuery);
-        } else if (vaccineData.received) {
-            // If received but no date provided, use current date
-            sql:ParameterizedQuery updateQuery = `UPDATE babadb.vaccine_records SET completed_date = NOW() WHERE user_id = ${vaccineData.userId} AND name = ${vaccineData.name} AND dose = ${vaccineData.dose}`;
-            result = dbClient->execute(updateQuery);
-        } else {
-            // If marking as not received, clear the completed_date
-            sql:ParameterizedQuery updateQuery = `UPDATE babadb.vaccine_records SET completed_date = NULL WHERE user_id = ${vaccineData.userId} AND name = ${vaccineData.name} AND dose = ${vaccineData.dose}`;
-            result = dbClient->execute(updateQuery);
-        }
-        
-        if result is sql:Error {
-            return <http:InternalServerError>{ body: { message: "Failed to update vaccine record" } };
-        }
-        return <http:Ok>{ body: { message: "Vaccine status updated successfully" } };
     }
 
     // Get doctor appointments endpoint
@@ -934,13 +887,10 @@ service /health on new http:Listener(9090) {
         }
         mysql:Client dbClient = <mysql:Client>globalClient;
         
-        // First ensure we're using the correct database
-        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE babadb`);
-        if useDbResult is sql:Error {
-            return <http:InternalServerError>{ body: { message: "Database connection error" } };
-        }
+        io:println("DEBUG: getDocAppointments called for userId: " + userId);
         
-        sql:ParameterizedQuery aq = `SELECT id, user_id, date, time, place, disease, completed FROM babadb.doc_appointments WHERE user_id = ${userId}`;
+        sql:ParameterizedQuery aq = `SELECT id, user_id, date, time, place, disease, completed FROM doc_appointments WHERE user_id = ${userId}`;
+        io:println("DEBUG: SQL Query executed for userId: " + userId);
         
         stream<record {}, sql:Error?> s = dbClient->query(aq);
         record {}[] appointments = [];
@@ -948,12 +898,16 @@ service /health on new http:Listener(9090) {
             record {}|sql:Error? row = s.next();
             if row is record {} { 
                 appointments.push(row); 
+                io:println("DEBUG: Found appointment row: " + row.toString());
             } else { 
                 break; 
             }
         }
         
+        io:println("DEBUG: Total appointments found: " + appointments.length().toString());
+        
         if appointments.length() == 0 {
+            io:println("DEBUG: No appointments found for userId: " + userId);
             return <http:Ok>{ body: [] };
         }
         
@@ -969,20 +923,25 @@ service /health on new http:Listener(9090) {
         }[] transformedAppointments = [];
         
         foreach record {} appointment in appointments {
+            io:println("DEBUG: Processing appointment: " + appointment.toString());
+            
             // Handle the nested 'value' field structure from MySQL results
             record {} appointmentData = appointment;
             if appointment.hasKey("value") {
                 appointmentData = <record {}>appointment["value"];
+                io:println("DEBUG: Found nested 'value' field, using appointmentData");
             }
             
             // Extract and transform fields
-            string id = appointmentData["id"] is int ? <string>(<int>appointmentData["id"]).toString() : (appointmentData["id"] is string ? <string>appointmentData["id"] : "");
+            string id = appointmentData["id"] is string ? <string>appointmentData["id"] : "";
             string dbUserId = appointmentData["user_id"] is string ? <string>appointmentData["user_id"] : "";
             string date = appointmentData["date"] is string ? <string>appointmentData["date"] : "";
             string time = appointmentData["time"] is string ? <string>appointmentData["time"] : "";
             string place = appointmentData["place"] is string ? <string>appointmentData["place"] : "";
             string disease = appointmentData["disease"] is string ? <string>appointmentData["disease"] : "";
             boolean completed = appointmentData["completed"] is boolean ? <boolean>appointmentData["completed"] : false;
+            
+            io:println("DEBUG: Transformed appointment - id: " + id + ", date: " + date + ", disease: " + disease + ", completed: " + completed.toString());
             
             record {
                 string id;
@@ -1005,177 +964,8 @@ service /health on new http:Listener(9090) {
             transformedAppointments.push(transformedAppointment);
         }
         
+        io:println("DEBUG: Returning " + transformedAppointments.length().toString() + " transformed appointments");
         return <http:Ok>{ body: transformedAppointments };
-    }
-
-    // Update doctor appointment endpoint
-    resource function put updateDocAppointment(@http:Payload record {
-        string userId;
-        string appointmentId;
-        string date;
-        string time;
-        string place;
-        string disease;
-        string doctorName;
-        boolean completed;
-    } appointmentUpdate) returns http:Ok|http:BadRequest|http:NotFound|http:InternalServerError|error {
-        if globalClient is () {
-            return <http:InternalServerError>{ body: { message: "Database not initialized" } };
-        }
-        mysql:Client dbClient = <mysql:Client>globalClient;
-        
-        // First, check if the appointment exists
-        sql:ParameterizedQuery checkQuery = `SELECT COUNT(*) as count FROM doc_appointments WHERE id = ${appointmentUpdate.appointmentId} AND user_id = ${appointmentUpdate.userId}`;
-        
-        stream<record {}, sql:Error?> checkResult = dbClient->query(checkQuery);
-        record {}|sql:Error? checkRow = checkResult.next();
-        if checkRow is sql:Error {
-            return <http:InternalServerError>{ body: { message: "Database error" } };
-        }
-        record {} row = <record {}>checkRow;
-        record {} rowData = row;
-        if row.hasKey("value") {
-            rowData = <record {}>row["value"];
-        }
-        int count = rowData["count"] is int ? <int>rowData["count"] : 0;
-        
-        if count == 0 {
-            return <http:NotFound>{ body: { message: "Appointment not found" } };
-        }
-        
-        // First ensure we're using the correct database
-        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE babadb`);
-        if useDbResult is sql:Error {
-            return <http:InternalServerError>{ body: { message: "Database connection error" } };
-        }
-        
-        // Use a simple approach - always update all fields
-        string doctorNameValue = appointmentUpdate.doctorName;
-        sql:ParameterizedQuery updateQuery = `UPDATE doc_appointments SET date = ${appointmentUpdate.date}, time = ${appointmentUpdate.time}, place = ${appointmentUpdate.place}, disease = ${appointmentUpdate.disease}, doctor_name = ${doctorNameValue}, completed = ${appointmentUpdate.completed ? "1" : "0"} WHERE id = ${appointmentUpdate.appointmentId} AND user_id = ${appointmentUpdate.userId}`;
-        sql:ExecutionResult|sql:Error result = dbClient->execute(updateQuery);
-        
-        if result is sql:Error {
-            return <http:InternalServerError>{ body: { message: "Failed to update appointment" } };
-        }
-        
-        return <http:Ok>{ body: { message: "Appointment updated successfully" } };
-    }
-
-    // Delete doctor appointment endpoint
-    resource function delete deleteDocAppointment(@http:Payload record {
-        string userId;
-        string appointmentId;
-    } appointmentDelete) returns http:Ok|http:NotFound|http:InternalServerError|error {
-        if globalClient is () {
-            return <http:InternalServerError>{ body: { message: "Database not initialized" } };
-        }
-        mysql:Client dbClient = <mysql:Client>globalClient;
-        
-        // First ensure we're using the correct database
-        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE babadb`);
-        if useDbResult is sql:Error {
-            return <http:InternalServerError>{ body: { message: "Database connection error" } };
-        }
-        
-        // First, check if the appointment exists
-        sql:ParameterizedQuery checkQuery = `SELECT COUNT(*) as count FROM babadb.doc_appointments WHERE id = ${appointmentDelete.appointmentId} AND user_id = ${appointmentDelete.userId}`;
-        
-        stream<record {}, sql:Error?> checkResult = dbClient->query(checkQuery);
-        record {}|sql:Error? checkRow = checkResult.next();
-        if checkRow is sql:Error {
-            return <http:InternalServerError>{ body: { message: "Database error" } };
-        }
-        record {} row = <record {}>checkRow;
-        record {} rowData = row;
-        if row.hasKey("value") {
-            rowData = <record {}>row["value"];
-        }
-        int count = rowData["count"] is int ? <int>rowData["count"] : 0;
-        
-        if count == 0 {
-            return <http:NotFound>{ body: { message: "Appointment not found" } };
-        }
-        
-        // Delete the appointment
-        sql:ParameterizedQuery deleteQuery = `DELETE FROM babadb.doc_appointments WHERE id = ${appointmentDelete.appointmentId} AND user_id = ${appointmentDelete.userId}`;
-        sql:ExecutionResult|sql:Error result = dbClient->execute(deleteQuery);
-        if result is sql:Error {
-            return <http:InternalServerError>{ body: { message: "Error deleting appointment" } };
-        }
-        
-        return <http:Ok>{ body: { message: "Appointment deleted successfully" } };
-    }
-
-    // Toggle appointment status endpoint (mark as pending/completed)
-    resource function put toggleAppointmentStatus(@http:Payload record {
-        string userId;
-        string appointmentId;
-    } appointmentToggle) returns http:Ok|http:NotFound|http:InternalServerError|error {
-        if globalClient is () {
-            return <http:InternalServerError>{ body: { message: "Database not initialized" } };
-        }
-        mysql:Client dbClient = <mysql:Client>globalClient;
-        
-        // First ensure we're using the correct database
-        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE babadb`);
-        if useDbResult is sql:Error {
-            return <http:InternalServerError>{ body: { message: "Database connection error" } };
-        }
-        
-        // First, check if the appointment exists and get current status
-        sql:ParameterizedQuery checkQuery = `SELECT completed FROM babadb.doc_appointments WHERE id = ${appointmentToggle.appointmentId} AND user_id = ${appointmentToggle.userId}`;
-        
-        stream<record {}, sql:Error?> checkResult = dbClient->query(checkQuery);
-        record {}|sql:Error? checkRow = checkResult.next();
-        
-        // Check if we got an error or no result
-        if checkRow is sql:Error {
-            return <http:InternalServerError>{ body: { message: "Database error" } };
-        }
-        
-        // Check if no appointment was found
-        if checkRow is () {
-            return <http:NotFound>{ body: { message: "Appointment not found" } };
-        }
-        
-        record {} row = <record {}>checkRow;
-        record {} rowData = row;
-        if row.hasKey("value") {
-            rowData = <record {}>row["value"];
-        }
-        
-        if (!rowData.hasKey("completed")) {
-            return <http:NotFound>{ body: { message: "Appointment not found" } };
-        }
-        
-        // Get current completed status - handle both boolean and int types
-        boolean currentStatus = false;
-        if (rowData["completed"] is boolean) {
-            currentStatus = <boolean>rowData["completed"];
-        } else if (rowData["completed"] is int) {
-            currentStatus = <int>rowData["completed"] == 1;
-        } else if (rowData["completed"] is string) {
-            currentStatus = <string>rowData["completed"] == "1";
-        }
-        
-        // Toggle the status
-        boolean newStatus = !currentStatus;
-        
-        // Update the appointment status - include database name in query
-        sql:ParameterizedQuery updateQuery = `UPDATE babadb.doc_appointments SET completed = ${newStatus ? "1" : "0"} WHERE id = ${appointmentToggle.appointmentId} AND user_id = ${appointmentToggle.userId}`;
-        io:println("DEBUG: Updating appointment " + appointmentToggle.appointmentId + " to status: " + newStatus.toString());
-        
-        sql:ExecutionResult|sql:Error result = dbClient->execute(updateQuery);
-        
-        if result is sql:Error {
-            io:println("DEBUG: Update failed with error: " + result.message());
-            return <http:InternalServerError>{ body: { message: "Failed to toggle appointment status" } };
-        }
-        
-        io:println("DEBUG: Update successful, rows affected: " + result.affectedRowCount.toString());
-        
-        string statusMessage = newStatus ? "completed" : "pending";
-        return <http:Ok>{ body: { message: "Appointment marked as " + statusMessage, newStatus: newStatus } };
     }
 
     // Get BMI records endpoint
@@ -1231,40 +1021,12 @@ service /health on new http:Listener(9090) {
                 io:println("DEBUG: Found nested 'value' field, using bmiData");
             }
             
-            // Extract and transform fields - handle both string and int types for id
-            string id = "";
-            if (bmiData["id"] is int) {
-                id = (<int>bmiData["id"]).toString();
-            } else if (bmiData["id"] is string) {
-                id = <string>bmiData["id"];
-            }
-            
+            // Extract and transform fields
+            string id = bmiData["id"] is string ? <string>bmiData["id"] : "";
             string dbUserId = bmiData["user_id"] is string ? <string>bmiData["user_id"] : "";
-            
-            // Handle weight - could be decimal or float
-            decimal weight = 0.0;
-            if (bmiData["weight"] is decimal) {
-                weight = <decimal>bmiData["weight"];
-            } else if (bmiData["weight"] is float) {
-                weight = <decimal>(<float>bmiData["weight"]);
-            }
-            
-            // Handle height - could be decimal or float
-            decimal height = 0.0;
-            if (bmiData["height"] is decimal) {
-                height = <decimal>bmiData["height"];
-            } else if (bmiData["height"] is float) {
-                height = <decimal>(<float>bmiData["height"]);
-            }
-            
-            // Handle bmi - could be decimal or float
-            decimal bmi = 0.0;
-            if (bmiData["bmi"] is decimal) {
-                bmi = <decimal>bmiData["bmi"];
-            } else if (bmiData["bmi"] is float) {
-                bmi = <decimal>(<float>bmiData["bmi"]);
-            }
-            
+            decimal weight = bmiData["weight"] is decimal ? <decimal>bmiData["weight"] : 0.0;
+            decimal height = bmiData["height"] is decimal ? <decimal>bmiData["height"] : 0.0;
+            decimal bmi = bmiData["bmi"] is decimal ? <decimal>bmiData["bmi"] : 0.0;
             string classification = bmiData["classification"] is string ? <string>bmiData["classification"] : "";
             string? notes = bmiData["notes"] is string ? <string>bmiData["notes"] : ();
             string createdAt = bmiData["created_at"] is string ? <string>bmiData["created_at"] : "";
@@ -1520,76 +1282,13 @@ service /health on new http:Listener(9090) {
         }
         mysql:Client dbClient = <mysql:Client>globalClient;
         
-        // Ensure we're using the correct database
-        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE babadb`);
-        if useDbResult is sql:Error {
-            return <http:InternalServerError>{ body: { message: "Database connection error" } };
-        }
-        
-        // Calculate due date based on offset months from current date
-        string dueDate = "";
-        if (customVaccine.vaccine.offsetMonths > 0) {
-            // Use a simple current date for now
-            dueDate = "2025-01-27"; // Current date
-        }
-        
-        // Insert only the columns that exist in the vaccine_records table
-        sql:ParameterizedQuery insertVaccine = `INSERT INTO vaccine_records (user_id, name, dose, due_date, is_custom, offset_months, created_at) VALUES (${customVaccine.userId}, ${customVaccine.vaccine.name}, ${customVaccine.vaccine.dose}, ${dueDate}, true, ${customVaccine.vaccine.offsetMonths}, NOW())`;
-        
+        sql:ParameterizedQuery insertVaccine = `INSERT INTO vaccine_records (user_id, name, dose, received, is_custom, offset_months, created_at) VALUES (${customVaccine.userId}, ${customVaccine.vaccine.name}, ${customVaccine.vaccine.dose}, ${customVaccine.vaccine.received}, ${customVaccine.vaccine.isCustom}, ${customVaccine.vaccine.offsetMonths}, NOW())`;
         sql:ExecutionResult|sql:Error insRes = dbClient->execute(insertVaccine);
         if insRes is sql:Error {
             return <http:InternalServerError>{ body: { message: "Error adding custom vaccine" } };
         }
+        
         return <http:Created>{ body: { message: "Custom vaccine added successfully" } };
-    }
-
-    // Delete vaccine endpoint (frontend compatible)
-    resource function delete deleteVaccine(@http:Payload record {
-        string userId;
-        string name;
-        string dose;
-    } vaccineData) returns http:Ok|http:InternalServerError|error {
-        if globalClient is () {
-            return <http:InternalServerError>{ body: { message: "Database not initialized" } };
-        }
-        mysql:Client dbClient = <mysql:Client>globalClient;
-        
-
-        
-        // First, check if the vaccine exists
-        sql:ParameterizedQuery checkQuery = `SELECT COUNT(*) as count FROM vaccine_records WHERE user_id = ${vaccineData.userId} AND name = ${vaccineData.name} AND dose = ${vaccineData.dose}`;
-        
-        stream<record {}, sql:Error?> checkResult = dbClient->query(checkQuery);
-        record {}|sql:Error? checkRow = checkResult.next();
-        if checkRow is sql:Error {
-            return <http:InternalServerError>{ body: { message: "Database error" } };
-        }
-        record {} row = <record {}>checkRow;
-        record {} rowData = row;
-        if row.hasKey("value") {
-            rowData = <record {}>row["value"];
-        }
-        int count = rowData["count"] is int ? <int>rowData["count"] : 0;
-        
-        if count == 0 {
-            return <http:InternalServerError>{ body: { message: "Vaccine not found" } };
-        }
-        
-        // Delete the vaccine record
-        sql:ParameterizedQuery deleteQuery = `DELETE FROM vaccine_records WHERE user_id = ${vaccineData.userId} AND name = ${vaccineData.name} AND dose = ${vaccineData.dose}`;
-        
-        // First ensure we're using the correct database
-        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE babadb`);
-        if useDbResult is sql:Error {
-            return <http:InternalServerError>{ body: { message: "Database connection error" } };
-        }
-        
-        sql:ExecutionResult|sql:Error result = dbClient->execute(deleteQuery);
-        if result is sql:Error {
-            return <http:InternalServerError>{ body: { message: "Error deleting vaccine" } };
-        }
-        
-        return <http:Ok>{ body: { message: "Vaccine deleted successfully" } };
     }
 
     // Add doctor appointment endpoint
@@ -1605,25 +1304,12 @@ service /health on new http:Listener(9090) {
         }
         mysql:Client dbClient = <mysql:Client>globalClient;
         
-        io:println("DEBUG: addDocAppointment called for userId: " + appointment.userId);
-        io:println("DEBUG: Appointment data: " + appointment.toString());
-        // Normalize time to HH:MM:SS if provided as HH:MM
-        string normTime = appointment.time;
-        if normTime.length() == 5 { // e.g., 09:30
-            normTime = normTime + ":00";
-        }
-
-        // Insert with normalized time; column names match schema
-        sql:ParameterizedQuery insertAppointment = `INSERT INTO doc_appointments (user_id, date, time, place, disease, doctor_name, completed, created_at) VALUES (${appointment.userId}, ${appointment.date}, ${normTime}, ${appointment.place}, ${appointment.disease}, 'General Doctor', false, NOW())`;
-        io:println("DEBUG: SQL Insert query executed for userId: " + appointment.userId);
-        
+        sql:ParameterizedQuery insertAppointment = `INSERT INTO doc_appointments (user_id, date, time, place, disease, completed, created_at) VALUES (${appointment.userId}, ${appointment.date}, ${appointment.time}, ${appointment.place}, ${appointment.disease}, false, NOW())`;
         sql:ExecutionResult|sql:Error insRes = dbClient->execute(insertAppointment);
         if insRes is sql:Error {
-            io:println("DEBUG: Error inserting appointment: " + insRes.toString());
             return <http:InternalServerError>{ body: { message: "Error adding doctor appointment" } };
         }
         
-        io:println("DEBUG: Doctor appointment added successfully");
         return <http:Created>{ body: { message: "Doctor appointment added successfully" } };
     }
 
@@ -1694,7 +1380,6 @@ service /health on new http:Listener(9090) {
         float weight;
         float height;
         string date;
-        string notes;
     } bmiRecord) returns http:Created|http:BadRequest|http:InternalServerError|error {
         if globalClient is () {
             return <http:InternalServerError>{ body: { message: "Database not initialized" } };
@@ -1763,189 +1448,13 @@ service /health on new http:Listener(9090) {
             }
         }
         
-        // First ensure we're using the correct database
-        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE babadb`);
-        if useDbResult is sql:Error {
-            return <http:InternalServerError>{ body: { message: "Database connection error" } };
-        }
-        
-        // Insert the BMI record
-        sql:ParameterizedQuery insertQuery;
-        if (bmiRecord.notes != "") {
-            insertQuery = `INSERT INTO bmi_records (user_id, weight, height, bmi, classification, notes, created_at) VALUES (${bmiRecord.userId}, ${bmiRecord.weight}, ${bmiRecord.height}, ${bmi}, ${classification}, ${bmiRecord.notes}, NOW())`;
-        } else {
-            insertQuery = `INSERT INTO bmi_records (user_id, weight, height, bmi, classification, created_at) VALUES (${bmiRecord.userId}, ${bmiRecord.weight}, ${bmiRecord.height}, ${bmi}, ${classification}, NOW())`;
-        }
-        
+        sql:ParameterizedQuery insertQuery = `INSERT INTO bmi_records (user_id, weight, height, bmi, classification, created_at) VALUES (${bmiRecord.userId}, ${bmiRecord.weight}, ${bmiRecord.height}, ${bmi}, ${classification}, NOW())`;
         sql:ExecutionResult|sql:Error insertResult = dbClient->execute(insertQuery);
         if insertResult is sql:Error {
             return <http:InternalServerError>{ body: { message: "Error adding BMI record" } };
         }
         
         return <http:Created>{ body: { message: "BMI record added successfully", bmi: bmi } };
-    }
-
-    // Update BMI record endpoint
-    resource function put updateBmiRecord(@http:Payload record {
-        string userId;
-        string recordId;
-        float weight;
-        float height;
-        string date;
-        string? notes;
-    } bmiUpdate) returns http:Ok|http:NotFound|http:InternalServerError|error {
-        if globalClient is () {
-            return <http:InternalServerError>{ body: { message: "Database not initialized" } };
-        }
-        mysql:Client dbClient = <mysql:Client>globalClient;
-        
-        // First, check if the BMI record exists
-        sql:ParameterizedQuery checkQuery = `SELECT COUNT(*) as count FROM bmi_records WHERE id = ${bmiUpdate.recordId} AND user_id = ${bmiUpdate.userId}`;
-        
-        stream<record {}, sql:Error?> checkResult = dbClient->query(checkQuery);
-        record {}|sql:Error? checkRow = checkResult.next();
-        if checkRow is sql:Error {
-            return <http:InternalServerError>{ body: { message: "Database error" } };
-        }
-        record {} row = <record {}>checkRow;
-        record {} rowData = row;
-        if row.hasKey("value") {
-            rowData = <record {}>row["value"];
-        }
-        int count = rowData["count"] is int ? <int>rowData["count"] : 0;
-        
-        if count == 0 {
-            return <http:NotFound>{ body: { message: "BMI record not found" } };
-        }
-        
-        // Calculate new BMI
-        float bmi = bmiUpdate.weight / (bmiUpdate.height * bmiUpdate.height);
-        
-        // Get user profile to calculate age and use growth classification
-        sql:ParameterizedQuery profileQuery = `SELECT gender, date_of_birth FROM users WHERE id = ${bmiUpdate.userId}`;
-        stream<record {}, sql:Error?> profileStream = dbClient->query(profileQuery);
-        record {}[] profiles = [];
-        while true {
-            record {}|sql:Error? profileRow = profileStream.next();
-            if profileRow is record {} { profiles.push(profileRow); } else { break; }
-        }
-        
-        string classification = "";
-        if (profiles.length() > 0) {
-            record {} profile = profiles[0];
-            if (profile.hasKey("value")) {
-                record {} profileData = <record {}>profile["value"];
-                string gender = profileData.hasKey("gender") ? profileData["gender"].toString() : "";
-                string dateOfBirth = profileData.hasKey("date_of_birth") ? profileData["date_of_birth"].toString() : "";
-                
-                if (gender != "" && dateOfBirth != "") {
-                    int ageInMonths = calculateAgeInMonths(dateOfBirth);
-                    if (ageInMonths <= 24) {
-                        // Use WHO growth standards for children under 2 years
-                        classification = getGrowthClassification(gender, ageInMonths, bmiUpdate.weight);
-                    } else {
-                        // Use standard BMI classification for older ages
-                        if (bmi < 18.5f) {
-                            classification = "underweight";
-                        } else if (bmi < 25.0f) {
-                            classification = "healthy";
-                        } else if (bmi < 30.0f) {
-                            classification = "overweight";
-                        } else {
-                            classification = "obese";
-                        }
-                    }
-                } else {
-                    // Fallback to standard BMI classification
-                    if (bmi < 18.5f) {
-                        classification = "underweight";
-                    } else if (bmi < 25.0f) {
-                        classification = "healthy";
-                    } else if (bmi < 30.0f) {
-                        classification = "overweight";
-                    } else {
-                        classification = "obese";
-                    }
-                }
-            }
-        } else {
-            // Fallback to standard BMI classification
-            if (bmi < 18.5f) {
-                classification = "underweight";
-            } else if (bmi < 25.0f) {
-                classification = "healthy";
-            } else if (bmi < 30.0f) {
-                classification = "overweight";
-            } else {
-                classification = "obese";
-            }
-        }
-        
-        // First ensure we're using the correct database
-        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE babadb`);
-        if useDbResult is sql:Error {
-            return <http:InternalServerError>{ body: { message: "Database connection error" } };
-        }
-        
-        // Update the BMI record
-        sql:ParameterizedQuery updateQuery;
-        if (bmiUpdate.notes is string) {
-            updateQuery = `UPDATE bmi_records SET weight = ${bmiUpdate.weight}, height = ${bmiUpdate.height}, bmi = ${bmi}, classification = ${classification}, notes = ${<string>bmiUpdate.notes} WHERE id = ${bmiUpdate.recordId} AND user_id = ${bmiUpdate.userId}`;
-        } else {
-            updateQuery = `UPDATE bmi_records SET weight = ${bmiUpdate.weight}, height = ${bmiUpdate.height}, bmi = ${bmi}, classification = ${classification} WHERE id = ${bmiUpdate.recordId} AND user_id = ${bmiUpdate.userId}`;
-        }
-        
-        sql:ExecutionResult|sql:Error result = dbClient->execute(updateQuery);
-        if result is sql:Error {
-            return <http:InternalServerError>{ body: { message: "Failed to update BMI record" } };
-        }
-        
-        return <http:Ok>{ body: { message: "BMI record updated successfully", bmi: bmi } };
-    }
-
-    // Delete BMI record endpoint
-    resource function delete deleteBmiRecord(@http:Payload record {
-        string userId;
-        string recordId;
-    } bmiDelete) returns http:Ok|http:NotFound|http:InternalServerError|error {
-        if globalClient is () {
-            return <http:InternalServerError>{ body: { message: "Database not initialized" } };
-        }
-        mysql:Client dbClient = <mysql:Client>globalClient;
-        
-        // First, check if the BMI record exists
-        sql:ParameterizedQuery checkQuery = `SELECT COUNT(*) as count FROM bmi_records WHERE id = ${bmiDelete.recordId} AND user_id = ${bmiDelete.userId}`;
-        
-        stream<record {}, sql:Error?> checkResult = dbClient->query(checkQuery);
-        record {}|sql:Error? checkRow = checkResult.next();
-        if checkRow is sql:Error {
-            return <http:InternalServerError>{ body: { message: "Database error" } };
-        }
-        record {} row = <record {}>checkRow;
-        record {} rowData = row;
-        if row.hasKey("value") {
-            rowData = <record {}>row["value"];
-        }
-        int count = rowData["count"] is int ? <int>rowData["count"] : 0;
-        
-        if count == 0 {
-            return <http:NotFound>{ body: { message: "BMI record not found" } };
-        }
-        
-        // First ensure we're using the correct database
-        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE babadb`);
-        if useDbResult is sql:Error {
-            return <http:InternalServerError>{ body: { message: "Database connection error" } };
-        }
-        
-        // Delete the BMI record
-        sql:ParameterizedQuery deleteQuery = `DELETE FROM bmi_records WHERE id = ${bmiDelete.recordId} AND user_id = ${bmiDelete.userId}`;
-        sql:ExecutionResult|sql:Error result = dbClient->execute(deleteQuery);
-        if result is sql:Error {
-            return <http:InternalServerError>{ body: { message: "Error deleting BMI record" } };
-        }
-        
-        return <http:Ok>{ body: { message: "BMI record deleted successfully" } };
     }
 
     // Add special notes endpoint
@@ -1957,12 +1466,6 @@ service /health on new http:Listener(9090) {
             return <http:InternalServerError>{ body: { message: "Database not initialized" } };
         }
         mysql:Client dbClient = <mysql:Client>globalClient;
-        
-        // First ensure we're using the correct database
-        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE babadb`);
-        if useDbResult is sql:Error {
-            return <http:InternalServerError>{ body: { message: "Database connection error" } };
-        }
         
         sql:ParameterizedQuery updateQuery = `UPDATE users SET special_notes = ${specialNotes.notes} WHERE id = ${specialNotes.userId}`;
         sql:ExecutionResult|sql:Error updateResult = dbClient->execute(updateQuery);
@@ -1980,6 +1483,8 @@ service /health on new http:Listener(9090) {
         }
         mysql:Client dbClient = <mysql:Client>globalClient;
         
+        io:println("DEBUG: getSpecialNotes called with userId: " + userId);
+        
         // First check if the special_notes column exists
         sql:ParameterizedQuery checkColumnQuery = `SHOW COLUMNS FROM users LIKE 'special_notes'`;
         stream<record {}, sql:Error?> columnCheck = dbClient->query(checkColumnQuery);
@@ -1989,18 +1494,15 @@ service /health on new http:Listener(9090) {
             if row is record {} { columnResults.push(row); } else { break; }
         }
         
+        io:println("DEBUG: special_notes column check results: " + columnResults.toString());
+        
         if (columnResults.length() == 0) {
             // Column doesn't exist, return empty notes
+            io:println("DEBUG: special_notes column not found, returning empty notes");
             return <http:Ok>{ body: { notes: "" } };
         }
         
-        // First ensure we're using the correct database
-        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE babadb`);
-        if useDbResult is sql:Error {
-            return <http:InternalServerError>{ body: { message: "Database connection error" } };
-        }
-        
-        sql:ParameterizedQuery query = `SELECT special_notes FROM babadb.users WHERE id = ${userId}`;
+        sql:ParameterizedQuery query = `SELECT special_notes FROM users WHERE id = ${userId}`;
         stream<record {}, sql:Error?> s = dbClient->query(query);
         record {}[] results = [];
         while true {
@@ -2008,17 +1510,15 @@ service /health on new http:Listener(9090) {
             if row is record {} { results.push(row); } else { break; }
         }
         
+        io:println("DEBUG: getSpecialNotes query results: " + results.toString());
+        
         if results.length() == 0 {
+            io:println("DEBUG: User not found for special notes");
             return <http:NotFound>{ body: { message: "User not found" } };
         }
         
-        // Extract notes from the nested 'value' field structure
-        record {} rowData = results[0];
-        if results[0].hasKey("value") {
-            rowData = <record {}>results[0]["value"];
-        }
-        
-        string notes = rowData["special_notes"] is string ? <string>rowData["special_notes"] : "";
+        string notes = results[0]["special_notes"] is string ? <string>results[0]["special_notes"] : "";
+        io:println("DEBUG: Returning special notes: " + notes);
         
         return <http:Ok>{ body: { notes: notes } };
     }
@@ -2123,30 +1623,5 @@ service /health on new http:Listener(9090) {
         }
         
         return <http:Ok>{ body: { message: "Appointment deleted successfully" } };
-    }
-
-    // Clear special notes endpoint
-    resource function delete clearSpecialNotes(@http:Payload record {
-        string userId;
-    } notesClear) returns http:Ok|http:InternalServerError|error {
-        if globalClient is () {
-            return <http:InternalServerError>{ body: { message: "Database not initialized" } };
-        }
-        mysql:Client dbClient = <mysql:Client>globalClient;
-        
-        // First ensure we're using the correct database
-        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE babadb`);
-        if useDbResult is sql:Error {
-            return <http:InternalServerError>{ body: { message: "Database connection error" } };
-        }
-        
-        // Clear the special notes
-        sql:ParameterizedQuery clearQuery = `UPDATE users SET special_notes = '' WHERE id = ${notesClear.userId}`;
-        sql:ExecutionResult|sql:Error result = dbClient->execute(clearQuery);
-        if result is sql:Error {
-            return <http:InternalServerError>{ body: { message: "Error clearing special notes" } };
-        }
-        
-        return <http:Ok>{ body: { message: "Special notes cleared successfully" } };
     }
 }

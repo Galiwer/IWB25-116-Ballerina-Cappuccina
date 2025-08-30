@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getRecommendedVaccines, markVaccineByNameDose } from '../services/vaccineService'
+import { getVaccinesFromBackend, markVaccineByNameDose } from '../services/vaccineService'
 import { getProfile } from '../services/profileService'
 import type { UserProfile } from '../services/profileService'
 import './alreadyVaccinated.css'
@@ -34,13 +34,13 @@ function AlreadyVaccinatedPage() {
 
       try {
         setLoading(true)
-        const recommendedVaccines = await getRecommendedVaccines(profile.gender)
-        setVaccines(recommendedVaccines)
+        const userVaccines = await getVaccinesFromBackend()
+        setVaccines(userVaccines)
         
-        // Initialize all vaccines as unselected
-        const initialSelection = recommendedVaccines.reduce((acc: {[key: string]: boolean}, vaccine: any) => {
+        // Initialize vaccines based on their current received status
+        const initialSelection = userVaccines.reduce((acc: {[key: string]: boolean}, vaccine: any) => {
           const key = `${vaccine.name}-${vaccine.dose}`
-          acc[key] = false
+          acc[key] = vaccine.received || false
           return acc
         }, {})
         

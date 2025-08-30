@@ -8,7 +8,20 @@ import SideNav from '../components/SideNav'
 
 function BmiPage() {
   useNavigate()
-  const [entries, setEntries] = useState<BmiEntry[]>(listBmi())
+  const [entries, setEntries] = useState<BmiEntry[]>([])
+  
+  // Load BMI entries on component mount
+  useEffect(() => {
+    const loadEntries = async () => {
+      try {
+        const data = await listBmi()
+        setEntries(data)
+      } catch (error) {
+        console.error('Error loading BMI entries:', error)
+      }
+    }
+    loadEntries()
+  }, [])
   const last = entries.length ? entries[entries.length - 1] : null
   const currentBmi = last ? computeBmi(last.heightCm, last.weightKg) : 0
   const status = classifyBmi(currentBmi)
@@ -17,7 +30,8 @@ function BmiPage() {
   const [dateISO, setDateISO] = useState<string>(new Date().toISOString().slice(0,10))
   const [heightCm, setHeightCm] = useState<number>(120)
   const [weightKg, setWeightKg] = useState<number>(25)
-  const [edit, setEdit] = useState<{ originalDateISO: string; dateISO: string; heightCm: number; weightKg: number } | null>(null)
+  const [notes, setNotes] = useState<string>('')
+  const [edit, setEdit] = useState<{ originalDateISO: string; dateISO: string; heightCm: number; weightKg: number; notes: string } | null>(null)
 
   const [profile, setProfile] = useState<Awaited<ReturnType<typeof getProfile>>>(null)
 
@@ -105,7 +119,7 @@ function BmiPage() {
   function closeTooltip() { setTooltip({ visible: false, left: 0, top: 0 }) }
 
   async function handleSaveNew() {
-    const newEntry: BmiEntry = { dateISO, heightCm, weightKg }
+    const newEntry: BmiEntry = { dateISO, heightCm, weightKg, notes }
     // Save to backend first
     await addBmiRecordToBackend(newEntry)
     // Refresh from backend; if empty, fall back to local
@@ -116,26 +130,47 @@ function BmiPage() {
       // Fallback to local storage
       const { addBmi } = await import('../services/bmiService')
       addBmi(newEntry)
-      setEntries(listBmi())
+      const updatedEntries = await listBmi()
+      setEntries(updatedEntries)
     }
     setModalOpen(false)
+    // Reset form
+    setNotes('')
   }
 
   function onEdit(entry: BmiEntry) {
-    setEdit({ originalDateISO: entry.dateISO, dateISO: entry.dateISO, heightCm: entry.heightCm, weightKg: entry.weightKg })
+    setEdit({ 
+      originalDateISO: entry.dateISO, 
+      dateISO: entry.dateISO, 
+      heightCm: entry.heightCm, 
+      weightKg: entry.weightKg,
+      notes: entry.notes || ''
+    })
   }
 
-  function onSaveEdit() {
+  async function onSaveEdit() {
     if (!edit) return
-    updateBmi(edit.originalDateISO, { dateISO: edit.dateISO, heightCm: edit.heightCm, weightKg: edit.weightKg })
-    setEntries(listBmi())
-    setEdit(null)
+    try {
+      await updateBmi(edit.originalDateISO, { 
+        dateISO: edit.dateISO, 
+        heightCm: edit.heightCm, 
+        weightKg: edit.weightKg,
+        notes: edit.notes
+      })
+      const updatedEntries = await listBmi()
+      setEntries(updatedEntries)
+      setEdit(null)
+    } catch (error) {
+      console.error('Error updating BMI record:', error)
+      alert('Failed to update BMI record')
+    }
   }
 
-  function onDelete(date: string) {
+  async function onDelete(date: string) {
     if (!confirm('Delete this record?')) return
-    deleteBmi(date)
-    setEntries(listBmi())
+    await deleteBmi(date)
+    const updatedEntries = await listBmi()
+    setEntries(updatedEntries)
   }
 
   // Note: previously used for UI sections; no longer needed
@@ -146,7 +181,14 @@ function BmiPage() {
       <main className="bmi-main">
         <header className="bmi-header">
           <h1 className="bmi-title">BMI & Growth Tracking</h1>
-          <button className="add-bmi-btn" onClick={() => setModalOpen(true)}>
+          <button className="add-bmi-btn" onClick={() => {
+          setModalOpen(true)
+          // Reset form fields
+          setDateISO(new Date().toISOString().slice(0,10))
+          setHeightCm(120)
+          setWeightKg(25)
+          setNotes('')
+        }}>
             <span className="add-icon">+</span>
             Add Entry
           </button>
@@ -200,6 +242,17 @@ function BmiPage() {
                       required
                     />
                   </div>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="bmi-notes">Notes (Optional)</label>
+                  <textarea
+                    id="bmi-notes"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Add any notes about this BMI record..."
+                    rows={3}
+                  />
                 </div>
 
                 <div className="bmi-preview">
@@ -437,38 +490,89 @@ function BmiPage() {
           </div>
         </div>
 
-        {/* Edit modal */}
-        {edit ? (
-          <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={() => setEdit(null)}>
-            <div className="modal" onClick={(e)=>e.stopPropagation()}>
-              <h2>Edit BMI entry</h2>
-              <div className="auth-form">
-                <label>Date<input type="date" value={edit.dateISO} onChange={(e)=>setEdit({ ...edit, dateISO: e.target.value })} /></label>
-                <label>Height (cm)<input type="number" value={edit.heightCm} onChange={(e)=>setEdit({ ...edit, heightCm: Number(e.target.value) })} /></label>
-                <label>Weight (kg)<input type="number" value={edit.weightKg} onChange={(e)=>setEdit({ ...edit, weightKg: Number(e.target.value) })} /></label>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1vmin' }}>
-                  <button className="ghost" type="button" onClick={()=>setEdit(null)}>Cancel</button>
-                  <button className="primary" type="button" onClick={onSaveEdit}>Save</button>
+        {/* Edit BMI Modal */}
+        {edit && (
+          <div className="bmi-modal-backdrop" onClick={() => setEdit(null)}>
+            <div className="bmi-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="bmi-modal-header">
+                <h2>Edit BMI Entry</h2>
+                <button className="modal-close" onClick={() => setEdit(null)}>✕</button>
+              </div>
+              
+              <form className="bmi-form" onSubmit={(e) => { e.preventDefault(); onSaveEdit(); }}>
+                <div className="form-group">
+                  <label htmlFor="edit-bmi-date">Date</label>
+                  <input
+                    id="edit-bmi-date"
+                    type="date"
+                    value={edit.dateISO}
+                    onChange={(e) => setEdit({ ...edit, dateISO: e.target.value })}
+                    required
+                  />
                 </div>
-              </div>
-            </div>
-          </div>
-        ) : null}
 
-        {/* Add modal */}
-        {isModalOpen ? (
-          <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={() => setModalOpen(false)}>
-            <div className="modal" onClick={(e)=>e.stopPropagation()}>
-              <h2>Add BMI entry</h2>
-              <div className="auth-form">
-                <label>Date<input type="date" value={dateISO} onChange={(e)=>setDateISO(e.target.value)} /></label>
-                <label>Height (cm)<input type="number" value={heightCm} onChange={(e)=>setHeightCm(Number(e.target.value))} /></label>
-                <label>Weight (kg)<input type="number" value={weightKg} onChange={(e)=>setWeightKg(Number(e.target.value))} /></label>
-                <button className="primary" onClick={handleSaveNew}>Save</button>
-              </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label htmlFor="edit-bmi-height">Height (cm)</label>
+                    <input
+                      id="edit-bmi-height"
+                      type="number"
+                      min="50"
+                      max="250"
+                      step="0.1"
+                      value={edit.heightCm}
+                      onChange={(e) => setEdit({ ...edit, heightCm: Number(e.target.value) })}
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="edit-bmi-weight">Weight (kg)</label>
+                    <input
+                      id="edit-bmi-weight"
+                      type="number"
+                      min="1"
+                      max="300"
+                      step="0.1"
+                      value={edit.weightKg}
+                      onChange={(e) => setEdit({ ...edit, weightKg: Number(e.target.value) })}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="edit-bmi-notes">Notes (Optional)</label>
+                  <textarea
+                    id="edit-bmi-notes"
+                    value={edit.notes}
+                    onChange={(e) => setEdit({ ...edit, notes: e.target.value })}
+                    placeholder="Add any notes about this BMI record..."
+                    rows={3}
+                  />
+                </div>
+
+                <div className="bmi-preview">
+                  <div className="preview-label">BMI Preview:</div>
+                  <div className="preview-value">
+                    {computeBmi(edit.heightCm, edit.weightKg).toFixed(1)}
+                    <span className="preview-category">({classifyBmi(computeBmi(edit.heightCm, edit.weightKg)).label})</span>
+                  </div>
+                </div>
+
+                <div className="form-actions">
+                  <button type="button" className="cancel-btn" onClick={() => setEdit(null)}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="save-btn">
+                    Update BMI Record
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
-        ) : null}
+        )}
+
+
       </main>
     </div>
   )
