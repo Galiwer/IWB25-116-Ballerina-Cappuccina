@@ -21,10 +21,12 @@ type UserGD record {|
     string date_of_birth;
 |};
 
-// Database configuration
-final string DATABASE_NAME = "railway";
-
-
+// Database configuration - configurable for Choreo
+configurable string dbHost = "mysql-production-8217.up.railway.app";
+configurable int dbPort = 3306;
+configurable string dbName = "railway";
+configurable string dbUser = "root";
+configurable string dbPassword = "ElBlPtqKfjEFfDBjcYzwfuqcTVTzEHCl";
 
 // Function to get MySQL connection parameters
 function getMySQLConnectionParams() returns record {
@@ -35,11 +37,11 @@ function getMySQLConnectionParams() returns record {
     string database;
 } {
     return {
-        host: "mysql-production-8217.up.railway.app",
-        port: 3306,
-        user: "root",
-        password: "ElBlPtqKfjEFfDBjcYzwfuqcTVTzEHCl",
-        database: "railway"
+        host: dbHost,
+        port: dbPort,
+        user: dbUser,
+        password: dbPassword,
+        database: dbName
     };
 }
 
@@ -51,10 +53,10 @@ function getMySQLConnectionParamsNoDB() returns record {
     string password;
 } {
     return {
-        host: "mysql-production-8217.up.railway.app",
-        port: 3306,
-        user: "root",
-        password: "ElBlPtqKfjEFfDBjcYzwfuqcTVTzEHCl"
+        host: dbHost,
+        port: dbPort,
+        user: dbUser,
+        password: dbPassword
     };
 }
 
