@@ -209,7 +209,29 @@ const Dashboard: React.FC = () => {
         completed: true
       });
       
-      setAppointmentNotifications(prev => prev.filter(a => a.id !== appointmentId));
+      // Refresh appointments to get updated data
+      const updatedAppointments = await getDocAppointments(true); // Force refresh
+      const notifications = updatedAppointments
+        .filter(apt => apt && apt.id)
+        .map(apt => ({
+          id: apt.id,
+          title: apt.disease || 'Appointment',
+          desc: `Place: ${apt.place || 'Not specified'}`,
+          date: apt.date || ''
+        }))
+        .sort((a, b) => {
+          try {
+            const da = toLocalDateFromISO(a.date);
+            const db = toLocalDateFromISO(b.date);
+            return da.getTime() - db.getTime();
+          } catch (error) {
+            console.error('Error sorting appointments:', error);
+            return 0;
+          }
+        })
+        .slice(0, 50);
+      
+      setAppointmentNotifications(notifications);
       setSuccessMessage('Appointment marked as done!');
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (e) {
@@ -254,11 +276,13 @@ const Dashboard: React.FC = () => {
   }, [profile?.dateOfBirth, allVaccines]);
 
   const [appointmentNotifications, setAppointmentNotifications] = useState<ApptNotif[]>([]);
+  const [isLoadingAppointments, setIsLoadingAppointments] = useState(true);
 
 
 
   useEffect(() => {
     const fetchDoctorAppointments = async () => {
+      setIsLoadingAppointments(true);
       try {
         let docAppointments: DocAppointment[] = [];
         try {
@@ -301,6 +325,8 @@ const Dashboard: React.FC = () => {
         console.error('Error in fetchDoctorAppointments:', error);
         // Fallback to empty array in case of any error
         setAppointmentNotifications([]);
+      } finally {
+        setIsLoadingAppointments(false);
       }
     };
 
@@ -442,7 +468,13 @@ const Dashboard: React.FC = () => {
             <section className="appointments">
               <h2>Doctors appointments</h2>
               <div className="feed notif-list hover-float scroll-panel">
-                {appointmentNotifications.length === 0 ? (
+                {isLoadingAppointments ? (
+                  <div className="notif status-ok">
+                    <div className="icon" />
+                    <div className="title">Loading appointments...</div>
+                    <div className="meta" />
+                  </div>
+                ) : appointmentNotifications.length === 0 ? (
                   <div className="notif status-ok">
                     <div className="icon" />
                     <div className="title">No upcoming appointments</div>

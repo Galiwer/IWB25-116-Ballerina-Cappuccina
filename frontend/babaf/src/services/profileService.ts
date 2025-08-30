@@ -109,7 +109,12 @@ export async function updateUserProfile(profile: Partial<UserProfile>): Promise<
   if (!userId) throw new Error('User not authenticated')
 
   try {
-    const requestBody = { userId, ...profile }
+    // Ensure all required fields are present, including photoDataUrl
+    const requestBody = { 
+      userId, 
+      ...profile,
+      photoDataUrl: profile.photoDataUrl || "" // Ensure photoDataUrl is always present as empty string if not provided
+    }
     console.log('Updating profile with data:', requestBody)
     
     const response = await fetch(`${BASE_URL}/updateUserProfile`, {

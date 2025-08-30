@@ -14,6 +14,17 @@ const BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || DEFAULT_BASE_URL
 // Import getUserId from profileService
 import { getUserId } from './profileService'
 
+// Simple cache for appointments
+let appointmentsCache: DocAppointment[] | null = null;
+let cacheTimestamp: number = 0;
+const CACHE_DURATION = 30000; // 30 seconds
+
+// Function to clear cache
+export const clearAppointmentsCache = () => {
+  appointmentsCache = null;
+  cacheTimestamp = 0;
+};
+
 export const formatDateFromBackend = (date: any): string => {
   if (!date) return '';
   
@@ -58,9 +69,16 @@ export const formatDateFromBackend = (date: any): string => {
 };
 
 // Get doctor appointments from backend
-export async function getDocAppointments(): Promise<DocAppointment[]> {
+export async function getDocAppointments(forceRefresh: boolean = false): Promise<DocAppointment[]> {
   const userId = getUserId()
   if (!userId) throw new Error('User not authenticated')
+
+  // Check cache first (unless force refresh is requested)
+  const now = Date.now();
+  if (!forceRefresh && appointmentsCache && (now - cacheTimestamp) < CACHE_DURATION) {
+    console.log('Returning cached appointments');
+    return appointmentsCache;
+  }
 
   try {
     console.log('Fetching doctor appointments for userId:', userId);
@@ -124,6 +142,11 @@ export async function getDocAppointments(): Promise<DocAppointment[]> {
     });
     
     console.log('Transformed appointments:', appointments);
+    
+    // Cache the results
+    appointmentsCache = appointments;
+    cacheTimestamp = now;
+    
     return appointments;
   } catch (error) {
     console.error('Error fetching doctor appointments:', error);
@@ -197,7 +220,7 @@ export async function addDocAppointment(appointment: Omit<DocAppointment, 'id' |
       const dateValue = responseData.date;
       console.log('Response flat appointment date value:', dateValue);
       
-      return {
+      const newAppointment = {
         id: responseData.id || '',
         userId: userId,
         date: formatDateFromBackend(dateValue) || appointment.date,
@@ -206,6 +229,11 @@ export async function addDocAppointment(appointment: Omit<DocAppointment, 'id' |
         disease: responseData.disease || appointment.disease,
         completed: responseData.completed || false
       };
+      
+      // Clear cache since we added a new appointment
+      clearAppointmentsCache();
+      
+      return newAppointment;
     }
   } catch (error) {
     console.error('Error in addDocAppointment:', error);
@@ -387,6 +415,10 @@ export const updateDocAppointment = async (appointmentId: string, updates: Parti
         completed: responseData.appointment.completed ?? false
       };
       console.log('Processed updated appointment (nested):', result);
+      
+      // Clear cache since we updated an appointment
+      clearAppointmentsCache();
+      
       return result;
     } else {
       // Flat structure
@@ -403,6 +435,10 @@ export const updateDocAppointment = async (appointmentId: string, updates: Parti
         completed: responseData.completed ?? false
       };
       console.log('Processed updated appointment (flat):', result);
+      
+      // Clear cache since we updated an appointment
+      clearAppointmentsCache();
+      
       return result;
     }
   } catch (error) {
@@ -456,6 +492,10 @@ export async function toggleAppointmentStatus(appointmentId: string): Promise<Do
       }
       
       console.log('Appointment status toggled successfully');
+      
+      // Clear cache since we toggled an appointment
+      clearAppointmentsCache();
+      
       return appointment;
     } else {
       // Fallback: fetch all appointments and find the updated one
@@ -467,6 +507,10 @@ export async function toggleAppointmentStatus(appointmentId: string): Promise<Do
       }
       
       console.log('Appointment status toggled successfully');
+      
+      // Clear cache since we toggled an appointment
+      clearAppointmentsCache();
+      
       return appointment;
     }
   } catch (error) {
@@ -507,6 +551,9 @@ export async function deleteDocAppointment(appointmentId: string): Promise<void>
     }
     
     console.log('Appointment deleted successfully');
+    
+    // Clear cache since we deleted an appointment
+    clearAppointmentsCache();
   } catch (error) {
     console.error('Error in deleteDocAppointment:', error);
     throw error;

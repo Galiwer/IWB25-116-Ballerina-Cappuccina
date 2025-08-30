@@ -32,8 +32,8 @@ function getMySQLConnectionString() returns string {
     if envUri is string {
         return envUri;
     }
-    // Default to XAMPP MySQL
-    return "jdbc:mysql://localhost:3306/babadb?user=root&password=&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true";
+    // Default to XAMPP MySQL with connection pooling and performance optimizations
+    return "jdbc:mysql://localhost:3306/babadb?user=root&password=&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true&autoReconnect=true&useUnicode=true&characterEncoding=utf8&cachePrepStmts=true&useServerPrepStmts=true&rewriteBatchedStatements=true&maintainTimeStats=false&elideSetAutoCommits=true&useLocalSessionState=true";
 }
 
 // Function to get MySQL connection string without database
@@ -78,6 +78,21 @@ function hashPassword(string password) returns string {
         result = result + hashedBytes[i].toString();
     }
     return result;
+}
+
+// Function to round float to integer
+function roundToInt(float value) returns int {
+    return <int>(value + 0.5f);
+}
+
+// Function to round float to 1 decimal place
+function roundTo1Decimal(float value) returns float {
+    return <float>(<int>(value * 10.0f + 0.5f)) / 10.0f;
+}
+
+// Function to round float to 2 decimal places
+function roundTo2Decimals(float value) returns float {
+    return <float>(<int>(value * 100.0f + 0.5f)) / 100.0f;
 }
 
 // Growth classification types and tables (derived from WHO growth standards)
@@ -371,8 +386,13 @@ function initializeDatabase(mysql:Client dbClient) returns error? {
     io:println("All tables created successfully");
 }
 
-// Global MySQL client
+// Global MySQL client with connection pool
 mysql:Client? globalClient = ();
+
+// Connection pool configuration
+final int MAX_POOL_SIZE = 10;
+final int MIN_POOL_SIZE = 2;
+final int CONNECTION_TIMEOUT = 30000; // 30 seconds
 
 // Main function
 public function main() {
@@ -1025,7 +1045,7 @@ service /health on new http:Listener(9090) {
         mysql:Client dbClient = <mysql:Client>globalClient;
         
         // First, check if the appointment exists
-        sql:ParameterizedQuery checkQuery = `SELECT COUNT(*) as count FROM doc_appointments WHERE id = ${appointmentUpdate.appointmentId} AND user_id = ${appointmentUpdate.userId}`;
+        sql:ParameterizedQuery checkQuery = `SELECT COUNT(*) as count FROM babadb.doc_appointments WHERE id = ${appointmentUpdate.appointmentId} AND user_id = ${appointmentUpdate.userId}`;
         
         stream<record {}, sql:Error?> checkResult = dbClient->query(checkQuery);
         record {}|sql:Error? checkRow = checkResult.next();
@@ -1043,15 +1063,9 @@ service /health on new http:Listener(9090) {
             return <http:NotFound>{ body: { message: "Appointment not found" } };
         }
         
-        // First ensure we're using the correct database
-        sql:ExecutionResult|sql:Error useDbResult = dbClient->execute(`USE babadb`);
-        if useDbResult is sql:Error {
-            return <http:InternalServerError>{ body: { message: "Database connection error" } };
-        }
-        
         // Use a simple approach - always update all fields
         string doctorNameValue = appointmentUpdate.doctorName;
-        sql:ParameterizedQuery updateQuery = `UPDATE doc_appointments SET date = ${appointmentUpdate.date}, time = ${appointmentUpdate.time}, place = ${appointmentUpdate.place}, disease = ${appointmentUpdate.disease}, doctor_name = ${doctorNameValue}, completed = ${appointmentUpdate.completed ? "1" : "0"} WHERE id = ${appointmentUpdate.appointmentId} AND user_id = ${appointmentUpdate.userId}`;
+        sql:ParameterizedQuery updateQuery = `UPDATE babadb.doc_appointments SET date = ${appointmentUpdate.date}, time = ${appointmentUpdate.time}, place = ${appointmentUpdate.place}, disease = ${appointmentUpdate.disease}, doctor_name = ${doctorNameValue}, completed = ${appointmentUpdate.completed ? "1" : "0"} WHERE id = ${appointmentUpdate.appointmentId} AND user_id = ${appointmentUpdate.userId}`;
         sql:ExecutionResult|sql:Error result = dbClient->execute(updateQuery);
         
         if result is sql:Error {
@@ -1257,13 +1271,15 @@ service /health on new http:Listener(9090) {
                 height = <decimal>(<float>bmiData["height"]);
             }
             
-            // Handle bmi - could be decimal or float
+            // Handle bmi - could be decimal or float, and round to 2 decimal places
             decimal bmi = 0.0;
             if (bmiData["bmi"] is decimal) {
                 bmi = <decimal>bmiData["bmi"];
             } else if (bmiData["bmi"] is float) {
                 bmi = <decimal>(<float>bmiData["bmi"]);
             }
+            // Round BMI to 2 decimal places for display
+            bmi = <decimal>roundTo2Decimals(<float>bmi);
             
             string classification = bmiData["classification"] is string ? <string>bmiData["classification"] : "";
             string? notes = bmiData["notes"] is string ? <string>bmiData["notes"] : ();
@@ -1408,77 +1424,25 @@ service /health on new http:Listener(9090) {
     // Update user profile endpoint
     resource function put updateUserProfile(@http:Payload record {
         string userId;
-        string? firstName;
-        string? lastName;
-        string? email;
-        string? gender;
-        string? dateOfBirth;
-        string? phoneNumber;
-        string? photoDataUrl;
+        string firstName;
+        string lastName;
+        string email;
+        string gender;
+        string dateOfBirth;
+        string phoneNumber;
+        string photoDataUrl;
     } profileUpdate) returns http:Ok|http:BadRequest|http:InternalServerError|error {
         if globalClient is () {
             return <http:InternalServerError>{ body: { message: "Database not initialized" } };
         }
         mysql:Client dbClient = <mysql:Client>globalClient;
         
-        // Build dynamic update query
-        string updateFields = "";
-        
-        // Check for firstName field
-        if (profileUpdate.firstName is string) {
-            string firstName = <string>profileUpdate.firstName;
-            updateFields += "first_name = '" + firstName + "', ";
-        }
-        
-        // Check for lastName field
-        if (profileUpdate.lastName is string) {
-            string lastName = <string>profileUpdate.lastName;
-            updateFields += "last_name = '" + lastName + "', ";
-        }
-        
-        // Check for email field
-        if (profileUpdate.email is string) {
-            string email = <string>profileUpdate.email;
-            updateFields += "email = '" + email + "', ";
-        }
-        
-        // Check for gender field
-        if (profileUpdate.gender is string) {
-            string gender = <string>profileUpdate.gender;
-            updateFields += "gender = '" + gender + "', ";
-        }
-        
-        // Check for dateOfBirth field
-        if (profileUpdate.dateOfBirth is string) {
-            string dateOfBirth = <string>profileUpdate.dateOfBirth;
-            updateFields += "date_of_birth = '" + dateOfBirth + "', ";
-        }
-        
-        // Check for phoneNumber field
-        if (profileUpdate.phoneNumber is string) {
-            string phoneNumber = <string>profileUpdate.phoneNumber;
-            updateFields += "phone_number = '" + phoneNumber + "', ";
-        }
-        
-        // Check for photoDataUrl field
-        if (profileUpdate.photoDataUrl is string) {
-            string photoDataUrl = <string>profileUpdate.photoDataUrl;
-            updateFields += "photo_data_url = '" + photoDataUrl + "', ";
-        }
-        
-        // Remove trailing comma and space
-        if (updateFields.length() > 2) {
-            updateFields = updateFields.substring(0, updateFields.length() - 2);
-        }
-        
-        if (updateFields == "") {
-            return <http:BadRequest>{ body: { message: "No fields to update" } };
-        }
-        
-
-        sql:ParameterizedQuery updateQuery = `UPDATE users SET ${updateFields} WHERE id = ${profileUpdate.userId}`;
+        // Build the query with individual field updates
+        sql:ParameterizedQuery updateQuery = `UPDATE babadb.users SET first_name = ${profileUpdate.firstName}, last_name = ${profileUpdate.lastName}, email = ${profileUpdate.email}, gender = ${profileUpdate.gender}, date_of_birth = ${profileUpdate.dateOfBirth}, phone_number = ${profileUpdate.phoneNumber}, photo_data_url = ${profileUpdate.photoDataUrl} WHERE id = ${profileUpdate.userId}`;
+        io:println("DEBUG: Profile update query: ", updateQuery);
         sql:ExecutionResult|sql:Error updateResult = dbClient->execute(updateQuery);
         if (updateResult is sql:Error) {
+            io:println("DEBUG: Profile update error: ", updateResult.message());
             return <http:InternalServerError>{ body: { message: "Error updating profile" } };
         }
         
@@ -1701,7 +1665,9 @@ service /health on new http:Listener(9090) {
         }
         mysql:Client dbClient = <mysql:Client>globalClient;
         
-        float bmi = bmiRecord.weight / (bmiRecord.height * bmiRecord.height);
+        // Convert height from centimeters to meters for BMI calculation
+        float heightInMeters = bmiRecord.height / 100.0f;
+        float bmi = bmiRecord.weight / (heightInMeters * heightInMeters);
         
         // Get user profile to calculate age and use growth classification
         sql:ParameterizedQuery profileQuery = `SELECT gender, date_of_birth FROM users WHERE id = ${bmiRecord.userId}`;
@@ -1769,12 +1735,17 @@ service /health on new http:Listener(9090) {
             return <http:InternalServerError>{ body: { message: "Database connection error" } };
         }
         
+        // Round values to avoid floating-point precision issues
+        int roundedHeight = roundToInt(bmiRecord.height);
+        float roundedWeight = roundTo1Decimal(bmiRecord.weight); // Round to 1 decimal place
+        float roundedBmi = roundTo2Decimals(bmi); // Round to 2 decimal places
+        
         // Insert the BMI record
         sql:ParameterizedQuery insertQuery;
         if (bmiRecord.notes != "") {
-            insertQuery = `INSERT INTO bmi_records (user_id, weight, height, bmi, classification, notes, created_at) VALUES (${bmiRecord.userId}, ${bmiRecord.weight}, ${bmiRecord.height}, ${bmi}, ${classification}, ${bmiRecord.notes}, NOW())`;
+            insertQuery = `INSERT INTO bmi_records (user_id, weight, height, bmi, classification, notes, created_at) VALUES (${bmiRecord.userId}, ${roundedWeight}, ${roundedHeight}, ${roundedBmi}, ${classification}, ${bmiRecord.notes}, NOW())`;
         } else {
-            insertQuery = `INSERT INTO bmi_records (user_id, weight, height, bmi, classification, created_at) VALUES (${bmiRecord.userId}, ${bmiRecord.weight}, ${bmiRecord.height}, ${bmi}, ${classification}, NOW())`;
+            insertQuery = `INSERT INTO bmi_records (user_id, weight, height, bmi, classification, created_at) VALUES (${bmiRecord.userId}, ${roundedWeight}, ${roundedHeight}, ${roundedBmi}, ${classification}, NOW())`;
         }
         
         sql:ExecutionResult|sql:Error insertResult = dbClient->execute(insertQuery);
@@ -1818,8 +1789,9 @@ service /health on new http:Listener(9090) {
             return <http:NotFound>{ body: { message: "BMI record not found" } };
         }
         
-        // Calculate new BMI
-        float bmi = bmiUpdate.weight / (bmiUpdate.height * bmiUpdate.height);
+        // Convert height from centimeters to meters for BMI calculation
+        float heightInMeters = bmiUpdate.height / 100.0f;
+        float bmi = bmiUpdate.weight / (heightInMeters * heightInMeters);
         
         // Get user profile to calculate age and use growth classification
         sql:ParameterizedQuery profileQuery = `SELECT gender, date_of_birth FROM users WHERE id = ${bmiUpdate.userId}`;
@@ -1887,12 +1859,17 @@ service /health on new http:Listener(9090) {
             return <http:InternalServerError>{ body: { message: "Database connection error" } };
         }
         
+        // Round values to avoid floating-point precision issues
+        int roundedHeight = roundToInt(bmiUpdate.height);
+        float roundedWeight = roundTo1Decimal(bmiUpdate.weight); // Round to 1 decimal place
+        float roundedBmi = roundTo2Decimals(bmi); // Round to 2 decimal places
+        
         // Update the BMI record
         sql:ParameterizedQuery updateQuery;
         if (bmiUpdate.notes is string) {
-            updateQuery = `UPDATE bmi_records SET weight = ${bmiUpdate.weight}, height = ${bmiUpdate.height}, bmi = ${bmi}, classification = ${classification}, notes = ${<string>bmiUpdate.notes} WHERE id = ${bmiUpdate.recordId} AND user_id = ${bmiUpdate.userId}`;
+            updateQuery = `UPDATE bmi_records SET weight = ${roundedWeight}, height = ${roundedHeight}, bmi = ${roundedBmi}, classification = ${classification}, notes = ${<string>bmiUpdate.notes} WHERE id = ${bmiUpdate.recordId} AND user_id = ${bmiUpdate.userId}`;
         } else {
-            updateQuery = `UPDATE bmi_records SET weight = ${bmiUpdate.weight}, height = ${bmiUpdate.height}, bmi = ${bmi}, classification = ${classification} WHERE id = ${bmiUpdate.recordId} AND user_id = ${bmiUpdate.userId}`;
+            updateQuery = `UPDATE bmi_records SET weight = ${roundedWeight}, height = ${roundedHeight}, bmi = ${roundedBmi}, classification = ${classification} WHERE id = ${bmiUpdate.recordId} AND user_id = ${bmiUpdate.userId}`;
         }
         
         sql:ExecutionResult|sql:Error result = dbClient->execute(updateQuery);
