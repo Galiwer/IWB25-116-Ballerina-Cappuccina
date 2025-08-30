@@ -1,12 +1,14 @@
 [build]
-builder = "dockerfile"
-dockerfilePath = "Dockerfile"
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.railway"
 
 [deploy]
+startCommand = "java -jar healthRecords.jar"
 healthcheckPath = "/health"
 healthcheckTimeout = 300
-restartPolicyType = "on_failure"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
 
-[env]
-PORT = "9090"
-MONGODB_URI = "mongodb+srv://himashavalantina55:Hima%401234@cluster0.ktheqad.mongodb.net/healthDB?retryWrites=true&w=majority"
+[[services]]
+name = "health-records-api"
+port = 9090
