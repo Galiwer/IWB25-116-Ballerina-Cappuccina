@@ -27,49 +27,46 @@ final string DATABASE_NAME = "railway";
 
 
 
-// Function to get MySQL connection string
+// Function to get MySQL connection string with Railway credentials
 function getMySQLConnectionString() returns string {
-    // Check for Choreo environment variables first
-    string? databaseUrl = os:getEnv("DATABASE_URL");
-    if databaseUrl is string {
-        return databaseUrl;
-    }
-    
-    // Check for legacy MYSQL_URI
-    string? envUri = os:getEnv("MYSQL_URI");
-    if envUri is string {
-        return envUri;
-    }
-    
-    // Build connection string from individual environment variables
-    string? dbHost = os:getEnv("DATABASE_HOST");
-    string? dbPort = os:getEnv("DATABASE_PORT");
-    string? dbName = os:getEnv("DATABASE_NAME");
-    string? dbUser = os:getEnv("DATABASE_USER");
-    string? dbPassword = os:getEnv("DATABASE_PASSWORD");
-    
-    if dbHost is string && dbUser is string {
-        string host = dbHost;
-        string port = dbPort is string ? dbPort : "3306";
-        string database = dbName is string ? dbName : "railway";
-        string user = dbUser;
-        string password = dbPassword is string ? dbPassword : "";
-        
-        return "jdbc:mysql://" + host + ":" + port + "/" + database + "?user=" + user + "&password=" + password + "&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true&autoReconnect=true&useUnicode=true&characterEncoding=utf8&cachePrepStmts=true&useServerPrepStmts=true&rewriteBatchedStatements=true&maintainTimeStats=false&elideSetAutoCommits=true&useLocalSessionState=true";
-    }
-    
-    // Default to XAMPP MySQL with connection pooling and performance optimizations
-    return "jdbc:mysql://localhost:3306/railway?user=root&password=&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true&autoReconnect=true&useUnicode=true&characterEncoding=utf8&cachePrepStmts=true&useServerPrepStmts=true&rewriteBatchedStatements=true&maintainTimeStats=false&elideSetAutoCommits=true&useLocalSessionState=true";
+    // 🔑 Railway MySQL credentials
+    string host = "mysql-production-8217.up.railway.app";
+    string port = "3306";
+    string database = "railway";
+    string user = "root";
+    string password = "ElBlPtqKfjEFfDBjcYzwfuqcTVTzEHCl";
+
+    return "jdbc:mysql://" + host + ":" + port + "/" + database + 
+           "?user=" + user + 
+           "&password=" + password + 
+           "&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true&autoReconnect=true&useUnicode=true&characterEncoding=utf8&cachePrepStmts=true&useServerPrepStmts=true&rewriteBatchedStatements=true&maintainTimeStats=false&elideSetAutoCommits=true&useLocalSessionState=true";
 }
 
 // Function to get MySQL connection string without database
 function getMySQLConnectionStringNoDB() returns string {
-    string? envUri = os:getEnv("MYSQL_URI");
-    if envUri is string {
-        return envUri;
-    }
-    // Default to XAMPP MySQL without database
-    return "jdbc:mysql://localhost:3306?user=root&password=&useSSL=false&allowPublicKeyRetrieval=true";
+    string host = "mysql-production-8217.up.railway.app";
+    string port = "3306";
+    string user = "root";
+    string password = "ElBlPtqKfjEFfDBjcYzwfuqcTVTzEHCl";
+
+    return "jdbc:mysql://" + host + ":" + port + 
+           "?user=" + user + 
+           "&password=" + password + 
+           "&useSSL=false&allowPublicKeyRetrieval=true";
+}
+
+// Bootstrap function to create database if it doesn't exist
+function bootstrapDatabase() returns error? {
+    io:println("Bootstrapping database...");
+
+    // Connect without specifying database
+    mysql:Client bootstrapClient = check new (getMySQLConnectionStringNoDB());
+
+    // Create database if it doesn't exist
+    sql:ParameterizedQuery createDB = `CREATE DATABASE IF NOT EXISTS railway`;
+    check bootstrapClient->execute(createDB);
+
+    io:println("Database created successfully");
 }
 
 // Bootstrap function to create database if it doesn't exist

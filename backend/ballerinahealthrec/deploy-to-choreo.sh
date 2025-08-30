@@ -1,45 +1,43 @@
 #!/bin/bash
 
-# Deploy Health Records API to Choreo
-# This script helps automate the deployment process
+echo "🚀 Deploying to Choreo..."
 
-echo "🚀 Deploying Health Records API to Choreo..."
-
-# Check if Choreo CLI is installed
-if ! command -v choreo &> /dev/null; then
-    echo "❌ Choreo CLI not found. Installing..."
-    npm install -g @choreo/cli
-fi
-
-# Check if user is logged in to Choreo
-if ! choreo whoami &> /dev/null; then
-    echo "🔐 Please login to Choreo first:"
-    choreo login
-fi
-
-# Build the application
-echo "🔨 Building Ballerina application..."
+# Build the Ballerina application
+echo "📦 Building Ballerina application..."
 bal build
 
-if [ $? -eq 0 ]; then
-    echo "✅ Build successful!"
-else
+if [ $? -ne 0 ]; then
     echo "❌ Build failed!"
     exit 1
 fi
 
-# Deploy to Choreo
-echo "📦 Deploying to Choreo..."
-choreo deploy
+echo "✅ Build successful!"
 
-if [ $? -eq 0 ]; then
-    echo "✅ Deployment successful!"
-    echo "🌐 Your application is now live on Choreo!"
-    echo "📋 Don't forget to:"
-    echo "   1. Configure environment variables in Choreo console"
-    echo "   2. Set up your database connection"
-    echo "   3. Update your frontend to use the new Choreo URL"
-else
+# Deploy to Choreo
+echo "🌐 Deploying to Choreo..."
+bal choreo deploy
+
+if [ $? -ne 0 ]; then
     echo "❌ Deployment failed!"
     exit 1
 fi
+
+echo "✅ Deployment successful!"
+echo ""
+echo "🔗 Your Choreo backend URL:"
+echo "https://316dda40-9b55-45ef-bc8e-8204b688dbea-dev.e1-us-east-azure.choreoapis.dev/default/ballerinahealthrec/v1.0"
+echo ""
+echo "📋 Next steps:"
+echo "1. Go to Choreo Console: https://console.choreo.dev/"
+echo "2. Navigate to your component: ballerinahealthrec"
+echo "3. Go to 'Config' tab"
+echo "4. Set these environment variables:"
+echo "   - DATABASE_HOST: mysql-production-8217.up.railway.app"
+echo "   - DATABASE_PORT: 3306"
+echo "   - DATABASE_NAME: railway"
+echo "   - DATABASE_USER: root"
+echo "   - DATABASE_PASSWORD: ElBlPtqKfjEFfDBjcYzwfuqcTVTzEHCl"
+echo "5. Click 'Save' and redeploy"
+echo ""
+echo "🧪 Test the deployment:"
+echo "curl -X GET 'https://316dda40-9b55-45ef-bc8e-8204b688dbea-dev.e1-us-east-azure.choreoapis.dev/default/ballerinahealthrec/v1.0/health'"
