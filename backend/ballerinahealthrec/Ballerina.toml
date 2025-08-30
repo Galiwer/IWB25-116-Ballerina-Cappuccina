@@ -6,10 +6,6 @@ distribution = "2201.12.7"
 
 [build-options]
 observabilityIncluded = true
-target = "cloud"
-
-[cloud]
-platform = "choreo"
 
 [[dependency]]
 org = "ballerinax"
@@ -23,6 +19,7 @@ version = "1.0.0"
 
 [platform]
 [[platform.java21.dependency]]
+path = "lib/mysql-connector-j-8.3.0.jar"
 groupId = "com.mysql"
 artifactId = "mysql-connector-j"
 version = "8.3.0"

@@ -3,9 +3,6 @@ target/
 *.jar
 *.balx
 
-# Local lib directory (no longer needed with Maven Central)
-lib/
-
 # IDE files
 .vscode/
 .idea/
@@ -34,10 +31,6 @@ README.md
 railway.toml
 nixpacks.toml
 build.sh
-
-# Choreo files (keep these for deployment)
-# Choreo.toml
-# CHOREO_DEPLOYMENT.md
 
 # Test files
 *_test.bal
