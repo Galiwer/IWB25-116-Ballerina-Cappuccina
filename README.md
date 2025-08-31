@@ -1,150 +1,98 @@
-<<'PATCH'
-*** Begin Patch
-*** Add File: README.md
-+## Health Vault — Full-Stack App (Frontend: React + TS, Backend: Ballerina + MongoDB)
-+
-+A simple health record and vaccination tracking app. The frontend is built with React 19, TypeScript, and Vite. The backend is a Ballerina HTTP service connected to MongoDB. It supports user signup/login, profile management, vaccine schedules (defaults + custom), BMI/growth checks, disease records, and both general and doctor appointments.
-+
-+### Features
-+- **Authentication**: Signup/Login with basic password hashing (SHA-256) and session stored in `localStorage`.
-+- **Profile**: View/update profile (name, DOB, gender, phone, photo) and delete account.
-+- **Vaccines**: Default schedule per gender, compute due dates from DOB, mark as received, add/update/delete custom vaccines.
-+- **Special Notes**: Save and edit user-specific notes.
-+- **BMI & Growth**: Store BMI records and classify growth/BMI.
-+- **Appointments**: General and doctor appointments CRUD.
-+
-+### Tech Stack
-+- **Frontend**: React 19, React Router 7, TypeScript 5, Vite 7, ESLint
-+- **Backend**: Ballerina `2201.12.7`, MongoDB Connector `ballerinax/mongodb 5.1.0`
-+- **Database**: MongoDB (local) at `mongodb://localhost:27017/babadb`
-+
-+### Project Structure
-+```text
-+babapotha/
-+  backend/
-+    ballerina_healthrec/
-+      Ballerina.toml
-+      main.bal
-+      type.bal
-+  frontend/
-+    babaf/
-+      package.json
-+      vite.config.ts
-+      src/
-+        pages/ (Auth, Dashboard, Profile, Vaccines, DoctorAppointments, etc.)
-+        services/ (authService, profileService, vaccineService, ...)
-+        components/ (ProtectedRoute, SideNav, Sidebar)
-+        hooks/ (useVaccineSync)
-+```
-+
-+### Prerequisites
-+- Node.js 18+ and npm
-+- Ballerina distribution `2201.12.7` (Swan Lake)
-+- MongoDB running locally on default port (or update connection string in backend)
-+
-+### Quick Start
-+1) Start MongoDB locally.
-+
-+2) Run the backend (Ballerina):
-+```bash
-+cd backend/ballerina_healthrec
-+bal run
-+```
-+This starts the service on `http://localhost:9090/health` and initializes collections in the `babadb` database.
-+
-+3) Run the frontend (Vite):
-+```bash
-+cd frontend/babaf
-+npm install
-+npm run dev
-+```
-+The app runs at `http://localhost:5173`.
-+
-+### Configuration
-+- Frontend API base URL defaults to `http://localhost:9090/health`. Override via `.env` in `frontend/babaf`:
-+```bash
-+# frontend/babaf/.env
-+VITE_API_BASE_URL=http://localhost:9090/health
-+```
-+- Backend Mongo connection is set in `backend/ballerina_healthrec/main.bal`:
-+```bal
-+connection: "mongodb://localhost:27017/babadb"
-+```
-+Change if needed.
-+
-+### Frontend Scripts
-+```bash
-+npm run dev        # start Vite dev server
-+npm run build      # type-check and build
-+npm run preview    # preview production build
-+npm run lint       # lint the codebase
-+```
-+
-+### Primary Pages
-+- `Welcome` → landing screen
-+- `Auth` → signin/signup (Gmail format + strong password validation in UI)
-+- `Dashboard` → profile summary, vaccine reminders, appointment notifications, special notes
-+- `Vaccines` → manage vaccine register (default + custom), mark as administered
-+- `DoctorAppointments` → manage doctor appointments
-+- `Profile` → view/edit/delete profile
-+
-+### API Overview (Base: `/health`)
-+- Health Check
-+  - `GET /health`
-+- Auth
-+  - `POST /signup`
-+  - `POST /login`
-+- Profile
-+  - `GET /getUserProfile?userId=...`
-+  - `PUT /updateUserProfile`
-+  - `DELETE /deleteProfile`
-+- Special Notes
-+  - `GET /getSpecialNotes?userId=...`
-+  - `PUT /updateSpecialNotes`
-+- Vaccines
-+  - `GET /getVaccines?userId=...`
-+  - `PUT /markVaccineReceived`
-+  - `POST /addCustomVaccine`
-+  - `PUT /updateVaccine`
-+  - `DELETE /deleteVaccine`
-+  - `GET /getRecommendedVaccines?gender=male|female`
-+- Diseases
-+  - `POST /addDisease`
-+  - `GET /getDiseases?userId=...`
-+- BMI & Growth
-+  - `POST /addBmiRecord`
-+  - `GET /getBmiRecords?userId=...`
-+  - `POST /checkGrowth`
-+- Appointments (general)
-+  - `POST /addAppointment`
-+  - `GET /getAppointments?userId=...`
-+  - `PUT /updateAppointment`
-+  - `DELETE /deleteAppointment`
-+- Doctor Appointments
-+  - `POST /addDocAppointment`
-+  - `GET /getDocAppointments?userId=...`
-+  - `PUT /updateDocAppointment`
-+  - `DELETE /deleteDocAppointment`
-+- Utilities
-+  - `GET /test` (simple backend check)
-+
-+Notes:
-+- The backend sends CORS headers and implements `OPTIONS` for all mutating routes.
-+- Some responses may be returned either as raw JSON objects/arrays or wrapped in `{ body: ... }`. The frontend services handle both.
-+
-+### Data & Defaults
-+- New users receive a default vaccine schedule based on gender. Due dates are derived from DOB + offset months.
-+- Passwords are hashed with SHA-256 (demo-level; no salt/pepper). Consider upgrading for production.
-+- The backend will create collections on startup if they do not exist.
-+
-+### Troubleshooting
-+- Backend fails to start: ensure MongoDB is running and reachable at the configured connection string.
-+- CORS errors: verify the frontend is on `http://localhost:5173` and backend on `http://localhost:9090`; CORS is enabled for these origins in the service config.
-+- Login issues: use credentials created via Signup. The Auth page enforces Gmail format and strong passwords on the client.
-+- Dates: Backend accepts dates as `YYYY-MM-DD`; the frontend normalizes various date shapes from the backend.
-+
-+### License
-+MIT (or update as appropriate)
-+
-*** End Patch
-PATCH
+# 🏥 Health Records App
+
+A simple app to track your child's health records, vaccines, and doctor appointments.
+
+## 🚀 Quick Start Guide
+
+### What You Need:
+- A computer (Windows, Mac, or Linux)
+- Internet connection to download software
+
+### Step 1: Install Required Software
+
+#### Install Node.js (for the app frontend):
+1. Go to [nodejs.org](https://nodejs.org)
+2. Download the "LTS" version (recommended)
+3. Run the installer and follow the instructions
+4. Restart your computer
+
+#### Install XAMPP (for the database):
+1. Go to [apachefriends.org](https://apachefriends.org)
+2. Download XAMPP for your operating system
+3. Run the installer and follow the instructions
+4. **Important**: During installation, you only need to select "MySQL" (uncheck Apache, FileZilla, etc.)
+
+### Step 2: Start the Database
+
+1. Open XAMPP Control Panel
+2. Click "Start" next to MySQL
+3. Wait until MySQL shows a green status
+4. Keep XAMPP running (don't close it)
+
+### Step 3: Download and Run the App
+
+1. Download this project folder to your computer
+2. Open a command prompt/terminal in the project folder
+
+#### Start the Backend (Database Server):
+```bash
+cd backend/ballerinahealthrec
+bal run
+```
+Wait until you see "Service is ready. Press Ctrl+C to stop."
+
+#### Start the Frontend (App Interface):
+Open a **new** command prompt/terminal in the project folder:
+```bash
+cd frontend/babaf
+npm install
+npm run dev
+```
+
+### Step 4: Use the App
+
+1. Open your web browser
+2. Go to: `http://localhost:5173`
+3. The app will open and you can:
+   - Create an account
+   - Add your child's information
+   - Track vaccines and appointments
+   - Monitor growth and BMI
+
+## 🔧 Troubleshooting
+
+### If the app doesn't start:
+- Make sure XAMPP is running and MySQL is green
+- Check that both command prompts show the app is running
+- Try refreshing your browser
+
+### If you get errors:
+- Make sure you're in the correct folders when running commands
+- Check that all software is properly installed
+- Restart your computer and try again
+
+## 📱 What the App Does
+
+- **Track Vaccines**: See what vaccines your child needs and when
+- **Manage Appointments**: Keep track of doctor visits
+- **Monitor Growth**: Record height, weight, and BMI
+- **Store Notes**: Keep important health information handy
+- **User Profiles**: Manage multiple children if needed
+
+## 🆘 Need Help?
+
+If something isn't working:
+1. Make sure XAMPP is running
+2. Check that both the backend and frontend are running
+3. Try refreshing your browser
+4. Restart the app by stopping both commands (Ctrl+C) and running them again
+
+## 📝 Notes
+
+- The app stores all data on your computer (no internet required after setup)
+- You can close the app anytime by pressing Ctrl+C in both command prompts
+- To use the app again, just repeat Step 3
+
+---
+
+**That's it!** Follow these steps and you'll have a health records app running on your computer. 🎉

@@ -26,14 +26,17 @@ type UserGD record {|
 // Database configuration
 final string DATABASE_NAME = "babadb";
 
+// Global MySQL client
+mysql:Client? globalClient = ();
+
 // Function to get MySQL connection string
 function getMySQLConnectionString() returns string {
     string? envUri = os:getEnv("MYSQL_URI");
     if envUri is string {
         return envUri;
     }
-    // Default to XAMPP MySQL with connection pooling and performance optimizations
-    return "jdbc:mysql://localhost:3306/babadb?user=root&password=&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true&autoReconnect=true&useUnicode=true&characterEncoding=utf8&cachePrepStmts=true&useServerPrepStmts=true&rewriteBatchedStatements=true&maintainTimeStats=false&elideSetAutoCommits=true&useLocalSessionState=true";
+    // Default to XAMPP MySQL with performance optimizations
+    return "jdbc:mysql://localhost:3306/babadb?user=root&password=&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true&autoReconnect=true&useUnicode=true&characterEncoding=utf8&cachePrepStmts=true&useServerPrepStmts=true&rewriteBatchedStatements=true&maintainTimeStats=false&elideSetAutoCommits=true&useLocalSessionState=true&connectionTimeout=30000&socketTimeout=30000&maxReconnects=3&initialTimeout=2";
 }
 
 // Function to get MySQL connection string without database
@@ -43,7 +46,7 @@ function getMySQLConnectionStringNoDB() returns string {
         return envUri;
     }
     // Default to XAMPP MySQL without database
-    return "jdbc:mysql://localhost:3306?user=root&password=&useSSL=false&allowPublicKeyRetrieval=true";
+    return "jdbc:mysql://localhost:3306?user=root&password=&useSSL=false&allowPublicKeyRetrieval=true&connectionTimeout=30000&socketTimeout=30000&maxReconnects=3&initialTimeout=2";
 }
 
 // Bootstrap function to create database if it doesn't exist
@@ -385,9 +388,6 @@ function initializeDatabase(mysql:Client dbClient) returns error? {
 
     io:println("All tables created successfully");
 }
-
-// Global MySQL client with connection pool
-mysql:Client? globalClient = ();
 
 // Connection pool configuration
 final int MAX_POOL_SIZE = 10;

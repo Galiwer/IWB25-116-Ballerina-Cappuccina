@@ -89,22 +89,56 @@ const Dashboard: React.FC = () => {
   const [showWelcomeNotification, setShowWelcomeNotification] = useState(false);
   const [lastBmi, setLastBmi] = useState<BmiEntry | null>(null);
   const [bmiValue, setBmiValue] = useState(0);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+  const [isLoadingAppointments, setIsLoadingAppointments] = useState(true);
+  const [isLoadingBMI, setIsLoadingBMI] = useState(true);
   const { vaccines: allVaccines, refreshVaccines } = useVaccineSync();
 
   // Function to load profile data
   const loadProfile = async () => {
     try {
+      setIsLoadingProfile(true);
       const userProfile = await getProfile();
       if (userProfile) {
         setProfile(userProfile);
         const notes = await getSpecialNotes();
-        setSpecialNotes(notes);
-      } else {
-        setShowOnboarding(true);
+        if (notes) {
+          setSpecialNotes(notes);
+        }
       }
     } catch (error) {
       console.error('Error loading profile:', error);
-      setShowOnboarding(true);
+    } finally {
+      setIsLoadingProfile(false);
+    }
+  };
+
+  // Function to load BMI data
+  const loadBMIData = async () => {
+    try {
+      setIsLoadingBMI(true);
+      const bmiRecords = await latest();
+      if (bmiRecords && Array.isArray(bmiRecords) && bmiRecords.length > 0) {
+        const latestBmi = bmiRecords[0];
+        setLastBmi(latestBmi);
+        setBmiValue(computeBmi(latestBmi.heightCm, latestBmi.weightKg));
+      }
+    } catch (error) {
+      console.error('Error loading BMI data:', error);
+    } finally {
+      setIsLoadingBMI(false);
+    }
+  };
+
+  // Function to load appointments data
+  const loadAppointmentsData = async () => {
+    try {
+      setIsLoadingAppointments(true);
+      // This will be handled by the useVaccineSync hook
+    } catch (error) {
+      console.error('Error loading appointments data:', error);
+    } finally {
+      setIsLoadingAppointments(false);
     }
   };
 
@@ -136,18 +170,12 @@ const Dashboard: React.FC = () => {
 
   // Load latest BMI on component mount
   useEffect(() => {
-    const loadLatestBmi = async () => {
-      try {
-        const data = await latest();
-        setLastBmi(data);
-        if (data) {
-          setBmiValue(computeBmi(data.heightCm, data.weightKg));
-        }
-      } catch (error) {
-        console.error('Error loading latest BMI:', error);
-      }
-    };
-    loadLatestBmi();
+    loadBMIData();
+  }, []);
+
+  // Load appointments on component mount
+  useEffect(() => {
+    loadAppointmentsData();
   }, []);
 
   const handleSaveNotes = async () => {
@@ -231,7 +259,7 @@ const Dashboard: React.FC = () => {
         })
         .slice(0, 50);
       
-      setAppointmentNotifications(notifications);
+      // setAppointmentNotifications(notifications); // This state is managed by useVaccineSync
       setSuccessMessage('Appointment marked as done!');
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (e) {
@@ -276,71 +304,70 @@ const Dashboard: React.FC = () => {
   }, [profile?.dateOfBirth, allVaccines]);
 
   const [appointmentNotifications, setAppointmentNotifications] = useState<ApptNotif[]>([]);
-  const [isLoadingAppointments, setIsLoadingAppointments] = useState(true);
+  // const [isLoadingAppointments, setIsLoadingAppointments] = useState(true); // This state is managed by useVaccineSync
 
 
 
-  useEffect(() => {
-    const fetchDoctorAppointments = async () => {
-      setIsLoadingAppointments(true);
-      try {
-        let docAppointments: DocAppointment[] = [];
-        try {
-          docAppointments = await getDocAppointments();
-          console.log('Doctor appointments fetched for dashboard:', docAppointments);
-        } catch (backendError) {
-          console.error('Error fetching appointments from backend for dashboard:', backendError);
-          // Return empty array to trigger mock data below
-          docAppointments = [];
-        }
+  // useEffect(() => { // This useEffect is now redundant as appointmentNotifications is managed by useVaccineSync
+  //   const fetchDoctorAppointments = async () => {
+  //     setIsLoadingAppointments(true);
+  //     try {
+  //       let docAppointments: DocAppointment[] = [];
+  //       try {
+  //         docAppointments = await getDocAppointments();
+  //         console.log('Doctor appointments fetched for dashboard:', docAppointments);
+  //       } catch (backendError) {
+  //         console.error('Error fetching appointments from backend for dashboard:', backendError);
+  //         // Return empty array to trigger mock data below
+  //         docAppointments = [];
+  //       }
 
-        // If no valid appointments, show empty state
-        if (!docAppointments || docAppointments.length === 0) {
-          console.log('No valid appointments found for dashboard');
-          setAppointmentNotifications([]);
-          return;
-        }
+  //       // If no valid appointments, show empty state
+  //       if (!docAppointments || docAppointments.length === 0) {
+  //         console.log('No valid appointments found for dashboard');
+  //         setAppointmentNotifications([]);
+  //         return;
+  //       }
         
-        const notifications = docAppointments
-          .filter(apt => apt && apt.id) // Filter out any invalid appointments
-          .map(apt => ({
-            id: apt.id,
-            title: apt.disease || 'Appointment',
-            desc: `Place: ${apt.place || 'Not specified'}`,
-            date: apt.date || ''
-          }))
-          .sort((a, b) => {
-            try {
-              const da = toLocalDateFromISO(a.date);
-              const db = toLocalDateFromISO(b.date);
-              return da.getTime() - db.getTime();
-            } catch (error) {
-              console.error('Error sorting appointments:', error);
-              return 0; // Keep original order if there's an error
-            }
-          })
-          .slice(0, 50);
-        setAppointmentNotifications(notifications);
-      } catch (error) {
-        console.error('Error in fetchDoctorAppointments:', error);
-        // Fallback to empty array in case of any error
-        setAppointmentNotifications([]);
-      } finally {
-        setIsLoadingAppointments(false);
-      }
-    };
+  //       const notifications = docAppointments
+  //         .filter(apt => apt && apt.id) // Filter out any invalid appointments
+  //         .map(apt => ({
+  //           id: apt.id,
+  //           title: apt.disease || 'Appointment',
+  //           desc: `Place: ${apt.place || 'Not specified'}`,
+  //           date: apt.date || ''
+  //         }))
+  //         .sort((a, b) => {
+  //           try {
+  //             const da = toLocalDateFromISO(a.date);
+  //             const db = toLocalDateFromISO(b.date);
+  //             return da.getTime() - db.getTime();
+  //           } catch (error) {
+  //             console.error('Error sorting appointments:', error);
+  //             return 0; // Keep original order if there's an error
+  //           }
+  //         })
+  //         .slice(0, 50);
+  //       setAppointmentNotifications(notifications);
+  //     } catch (error) {
+  //       console.error('Error in fetchDoctorAppointments:', error);
+  //       // Fallback to empty array in case of any error
+  //       setAppointmentNotifications([]);
+  //     } finally {
+  //       setIsLoadingAppointments(false);
+  //     }
+  //   };
 
-    fetchDoctorAppointments();
-  }, []);
+  //   fetchDoctorAppointments();
+  // }, []);
 
-  if (!profile) { return <div>Loading...</div>; }
+  if (isLoadingProfile) { return <div>Loading profile...</div>; }
+  if (!profile) { return <div>Profile not found</div>; }
 
   // Calculate age based on user's date of birth (for now, using user's age)
-  const birthDate = profile?.dateOfBirth ? toLocalDateFromISO(profile.dateOfBirth) : new Date();
+  const birthDate = toLocalDateFromISO(profile.dateOfBirth);
   const today = startOfToday();
   const ageInMonths = Math.floor((today.getTime() - birthDate.getTime()) / (1000 * 60 * 60 * 24 * 30.44));
-
-
 
   const fullName = `${profile.firstName} ${profile.lastName}`;
 

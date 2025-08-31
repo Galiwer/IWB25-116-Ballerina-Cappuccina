@@ -25,6 +25,23 @@ export const clearAppointmentsCache = () => {
   cacheTimestamp = 0;
 };
 
+// Request debouncing
+let pendingRequests: Map<string, Promise<any>> = new Map();
+
+// Function to debounce requests
+const debounceRequest = <T>(key: string, requestFn: () => Promise<T>): Promise<T> => {
+  if (pendingRequests.has(key)) {
+    return pendingRequests.get(key)!;
+  }
+  
+  const promise = requestFn().finally(() => {
+    pendingRequests.delete(key);
+  });
+  
+  pendingRequests.set(key, promise);
+  return promise;
+};
+
 export const formatDateFromBackend = (date: any): string => {
   if (!date) return '';
   
@@ -80,7 +97,9 @@ export async function getDocAppointments(forceRefresh: boolean = false): Promise
     return appointmentsCache;
   }
 
-  try {
+  // Use debouncing to prevent multiple simultaneous requests
+  return debounceRequest(`getAppointments_${userId}`, async () => {
+    try {
     console.log('Fetching doctor appointments for userId:', userId);
     const response = await fetch(`${BASE_URL}/getDocAppointments?userId=${userId}`, {
       headers: { 
@@ -149,10 +168,11 @@ export async function getDocAppointments(forceRefresh: boolean = false): Promise
     
     return appointments;
   } catch (error) {
-    console.error('Error fetching doctor appointments:', error);
-    return [];
-  }
-}
+         console.error('Error fetching doctor appointments:', error);
+     return [];
+   }
+   });
+ }
 
 // Add doctor appointment to backend
 export async function addDocAppointment(appointment: Omit<DocAppointment, 'id' | 'userId'>): Promise<DocAppointment> {
