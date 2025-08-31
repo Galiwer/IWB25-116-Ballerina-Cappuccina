@@ -56,7 +56,7 @@ export async function updateBmi(originalDateISO: string, updated: BmiEntry): Pro
         userId,
         recordId: record.id || originalDateISO,
         weight: updated.weightKg,
-        height: updated.heightCm / 100,
+        height: updated.heightCm,
         date: updated.dateISO,
         notes: updated.notes || ''
       }),
@@ -137,7 +137,7 @@ export async function fetchBmiRecords(): Promise<BmiEntry[]> {
       return {
         id: rec.id?.toString() || '',
         dateISO,
-        heightCm: Number(rec.height) * 100 || 0,
+        heightCm: Number(rec.height) || 0,
         weightKg: Number(rec.weight) || 0,
         notes: rec.notes || ''
       }
@@ -157,7 +157,7 @@ export async function addBmiRecordToBackend(entry: BmiEntry): Promise<number | n
   const payload = {
     userId,
     weight: entry.weightKg,
-    height: entry.heightCm / 100,
+    height: entry.heightCm,
     date: entry.dateISO,
     notes: entry.notes || ''
   }
