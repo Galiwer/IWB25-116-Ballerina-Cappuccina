@@ -1,6 +1,5 @@
 # Ballerina build artifacts
 target/
-*.jar
 *.balx
 
 # IDE files
@@ -13,8 +12,13 @@ Thumbs.db
 
 # Logs
 *.log
+server.log
 
 # Environment files
 .env
 .env.local
 .env.production
+
+# Allow lib folder with MySQL connector
+!lib/
+!lib/*.jar
