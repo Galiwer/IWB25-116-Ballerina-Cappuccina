@@ -86,6 +86,7 @@ If something isn't working:
 2. Check that both the backend and frontend are running
 3. Try refreshing your browser
 4. Restart the app by stopping both commands (Ctrl+C) and running them again
+5. Download mysql-connector.jar and replace mysql-connector.jar located in backend/lib folder.
 
 ## 📝 Notes
 
