@@ -1,4 +1,4 @@
-# 🏥 Health Records App
+# 🏥HealthVault - Health Records App
 
 A simple app to track your child's health records, vaccines, and doctor appointments.
 
